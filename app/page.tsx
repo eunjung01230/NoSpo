@@ -1,3 +1,4 @@
+import Link from "next/link";
 import {
   countMyPosts,
   countWorksByCategory,
@@ -61,8 +62,17 @@ export default async function WorkBrowsePage() {
             style={{ margin: 0, maxWidth: "34em", fontSize: 16, lineHeight: 1.8 }}
           >
             작품마다 내가 본 지점을 정해두면, 글쓴이가 지정한 회차가 그 지점 이하인 글만 열립니다.
-            AI가 본문을 판별하지 않고, 작성자가 고른 회차와 내 진도만 비교합니다.
+            작성자가 고른 회차와 내 진도를 비교할 뿐, 본문을 대신 읽어 판별하지 않습니다.
           </p>
+          {/* 처음 온 사람이 가장 먼저 할 일. 작품을 찾는 자리로 곧장 보낸다. */}
+          <div className="row" style={{ gap: 12 }}>
+            <Link href="/search" className="btn btn-primary btn-lg">
+              내 작품 찾기
+            </Link>
+            <Link href="/works/new" className="btn">
+              목록에 없는 작품 추가
+            </Link>
+          </div>
         </div>
         <div className="promise" style={{ flex: "0 1 330px" }}>
           <b>이 방의 약속</b>

@@ -8,7 +8,6 @@ import {
   BOARD_DESCRIPTIONS,
   BOARD_LABELS,
   boardPath,
-  isUngated,
   slugToBoard,
   progressSummary,
   stageQuestion,
@@ -60,10 +59,8 @@ export default async function NewPostPage({
             {BOARD_DESCRIPTIONS[boardType]}
           </span>
           <span style={{ fontSize: 14, lineHeight: 1.6, color: "var(--ns-ink-muted)" }}>
-            {work.title} · 작성자 {user.display_name}(시연 사용자)
-            {isUngated(boardType)
-              ? " · 진도 제한 없는 게시판"
-              : ` · 현재 진도 ${progressSummary(work.progress_unit, currentStage?.label ?? null)}`}
+            {work.title} · 작성자 {user.display_name}(시연 사용자) · 현재 진도{" "}
+            {progressSummary(work.progress_unit, currentStage?.label ?? null)}
           </span>
         </div>
 
@@ -72,7 +69,7 @@ export default async function NewPostPage({
             신고가 확인된 글이 {warnings}건 있어 글쓰기가 멈춰 있습니다. 관리자가 확인하면
             다시 쓸 수 있습니다.
           </p>
-        ) : selectable.length === 0 && !isUngated(boardType) ? (
+        ) : selectable.length === 0 ? (
           <p className="form-error">
             아직 진도가 없어 글을 쓸 수 없습니다. 작품 화면에서 진도를 먼저 올려주세요.
           </p>

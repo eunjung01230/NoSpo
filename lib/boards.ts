@@ -20,16 +20,10 @@ export const BOARD_LABELS: Record<BoardType, string> = {
 };
 
 /**
- * 진도 제한이 없는 게시판. 글의 max_stage를 0으로 저장하므로
- * `max_stage <= 진도` 라는 공개 조건은 그대로 두고도 항상 공개된다.
- * (공개 판정 규칙을 우회하는 예외 분기를 만들지 않기 위한 설계다.)
+ * 진도 제한이 없는 게시판은 두지 않는다. 자유 게시판도 다른 게시판과 똑같이
+ * 글의 max_stage를 받아 `max_stage <= 읽는 사람의 진도`로만 공개한다.
+ * '자유'는 진도의 자유가 아니라 이야기 주제의 자유를 뜻한다.
  */
-export const UNGATED_BOARDS: BoardType[] = ["free"];
-export const FREE_STAGE = 0;
-
-export function isUngated(board: BoardType) {
-  return UNGATED_BOARDS.includes(board);
-}
 
 /** 댓글은 모든 게시판에서 받는다. 답글은 한 단계까지만 달린다. */
 export const BOARD_COMMENTS: Record<BoardType, boolean> = {
@@ -70,7 +64,7 @@ export const BOARD_DESCRIPTIONS: Record<BoardType, string> = {
   question: "내가 본 회차까지의 내용으로 궁금한 점을 남기는 곳입니다.",
   interpretation: "인물, 복선, 장면의 의미에 대한 해석을 기록합니다.",
   recap: "현재까지 본 구간에 대한 정리와 평가를 남깁니다.",
-  free: "진도와 상관없이 모두에게 열려 있는 이야기 공간입니다.",
+  free: "회차에 매이지 않는 이야기를 나눕니다. 주제는 자유롭지만 공개 범위는 다른 게시판과 같습니다.",
 };
 
 
@@ -108,7 +102,7 @@ export const BOARD_PLACEHOLDERS: Record<BoardType, { title: string; body: string
   },
   free: {
     title: '무엇에 대한 이야기인가요',
-    body: '진도 제한이 없는 방이라 모든 사람에게 그대로 보입니다. 결말이나 전개를 적으면 아직 보지 않은 사람에게도 보이니, 그건 다른 게시판에 적어주세요.',
+    body: '주제는 자유롭게 고르되, 위에서 고른 회차까지의 내용으로만 적어주세요. 그 뒤의 전개나 암시는 빼주세요.',
   },
 };
 
@@ -122,7 +116,7 @@ export function stageTag(
   stageLabel: string | null,
   progressUnit = "episode"
 ) {
-  if (isUngated(board) || !stageLabel) return "진도 제한 없음";
+  if (!stageLabel) return "회차 미지정";
   if (progressUnit === "single") {
     switch (board) {
       case "question":
@@ -145,6 +139,22 @@ export function stageTag(
     default:
       return `${stageLabel}까지의 내용`;
   }
+}
+
+/**
+ * 댓글 입력칸 옆에 붙는 대화의 경계. 이 글이 어느 회차까지를 다루는 글인지
+ * 답을 쓰기 직전에 다시 한 번 밝힌다(질문 게시판은 "답해주세요"라고 말한다).
+ */
+export function commentScopeNote(
+  board: BoardType,
+  stageLabel: string | null,
+  progressUnit: string
+) {
+  const verb = board === "question" ? "답해주세요" : "이야기해주세요";
+  if (progressUnit === "single" || !stageLabel) {
+    return `이 ${board === "question" ? "질문" : "글"}은 작품 전체를 본 사람들끼리의 자리예요. 다른 작품 이야기는 빼고 ${verb}.`;
+  }
+  return `이 ${board === "question" ? "질문" : "글"}은 ${stageLabel}까지의 내용으로 ${verb}. 그 뒤의 전개는 적지 말아주세요.`;
 }
 
 /**

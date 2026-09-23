@@ -17,7 +17,6 @@ import {
   BOARD_SLUGS,
   boardPath,
   commentNoun,
-  isUngated,
   slugToBoard,
   progressSentence,
   stageScopeParts,
@@ -119,9 +118,9 @@ export default async function BoardPage({
                 </div>
                 <span className="desc">{BOARD_DESCRIPTIONS[boardType]}</span>
                 <span className="caption">
-                  {isUngated(boardType)
-                    ? `${user.display_name}님의 진도와 상관없이 모든 글이 열립니다.`
-                    : `${user.display_name}님은 ${progressSentence(work.progress_unit, currentStage?.label ?? null)} · 이번 구현에서는 내 진도에서 읽을 수 있는 글만 표시합니다.`}
+                  {user.display_name}님은{" "}
+                  {progressSentence(work.progress_unit, currentStage?.label ?? null)} ·
+                  이번 구현에서는 내 진도에서 읽을 수 있는 글만 표시합니다.
                 </span>
               </div>
               <Link
@@ -132,11 +131,10 @@ export default async function BoardPage({
               </Link>
             </div>
 
-            {isUngated(boardType) && (
+            {boardType === "free" && (
               <div className="sheet-note">
-                여기는 진도를 묻지 않는 방이에요. 쓴 글이 모두에게 그대로 보이니,
-                아직 보지 않은 사람 앞에서 해도 괜찮은 이야기만 남겨주세요.
-                내용이 걸리는 이야기는 감상·해석·후기 게시판에서 회차를 정해 적어주세요.
+                자유로운 건 이야기의 주제예요. 공개 범위는 다른 게시판과 같아서, 글쓴이가
+                고른 회차가 내 진도 이하일 때만 제목과 본문이 열립니다.
               </div>
             )}
 
@@ -157,12 +155,7 @@ export default async function BoardPage({
                 {mineOnly ? "전체 글 보기" : "내 글만 보기"}
               </Link>
               <span>
-                {posts.length}편 ·{" "}
-                {mineOnly
-                  ? "내가 쓴 글"
-                  : isUngated(boardType)
-                    ? "진도 제한 없이 열린 글"
-                    : "지금 열람 가능한 글"}
+                {posts.length}편 · {mineOnly ? "내가 쓴 글" : "지금 열람 가능한 글"}
                 {lockedHere > 0 && ` · 내 진도 이후 ${lockedHere}편 잠김`}
               </span>
             </div>
@@ -180,19 +173,8 @@ export default async function BoardPage({
               </div>
             )}
 
-            {isUngated(boardType) &&
-              posts.map((p) => (
-                <Link key={p.id} href={href(p)} className="post-row post-row-free">
-                  <span className="open">열림</span>
-                  <span className="stack" style={{ gap: 6 }}>
-                    <span className="title">{p.title}</span>
-                    <p className="excerpt">{excerpt(p.body)}</p>
-                    <Meta post={p} mine={p.author_id === user.id} />
-                  </span>
-                </Link>
-              ))}
-
-            {boardType === "review" &&
+            {/* 감상과 자유는 같은 행 형식을 쓴다. 회차를 앞에 세우는 것도 똑같다. */}
+            {(boardType === "review" || boardType === "free") &&
               posts.map((p) => (
                 <Link key={p.id} href={href(p)} className="post-row">
                   <span className="ep">

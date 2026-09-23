@@ -39,7 +39,7 @@ export type Screening = {
 export type ScreenInput = {
   workTitle: string;
   boardType: BoardType;
-  /** 작성자가 고른 범위의 이름. 자유 게시판이면 null. */
+  /** 작성자가 고른 범위의 이름. 회차가 아직 없는 작품이면 null. */
   stageLabel: string | null;
   /** 작품 전체 회차 수. 회차 번호 언급을 검사할 때 쓴다. */
   totalStages: number;
@@ -90,7 +90,7 @@ function prompt(input: ScreenInput) {
     `게시판: ${BOARD_LABELS[input.boardType]}`,
     input.stageLabel
       ? `작성자가 고른 글의 범위: ${input.stageLabel} (전체 ${input.totalStages}단계 중 ${input.maxStage}번째)`
-      : "이 글은 진도 제한이 없는 자유 게시판 글이라, 아직 아무것도 보지 않은 사람에게도 그대로 보입니다.",
+      : `작성자가 고른 글의 범위: 전체 ${input.totalStages}단계 중 ${input.maxStage}번째`,
     "",
     `제목: ${input.title}`,
     "본문:",
@@ -102,7 +102,6 @@ const SYSTEM = `당신은 감상 커뮤니티의 글을 작성자 본인에게 �
 판단할 것은 단 하나입니다: 이 글의 내용이 작성자가 고른 범위를 넘어서는가?
 - 범위 안의 이야기는 아무리 자세해도 문제가 아닙니다. 이 커뮤니티는 같은 진도끼리 마음껏 이야기하는 곳입니다.
 - 범위를 넘는 전개·결말·생사·정체·반전을 드러내거나 강하게 암시하면 넘어선 것입니다.
-- 자유 게시판 글이라면 기준이 더 엄격합니다. 아직 아무것도 보지 않은 사람에게 보이므로, 작품의 전개가 드러나면 넘어선 것입니다.
 답은 아래 JSON 한 줄로만 하세요. 다른 말은 쓰지 마세요.
 {"verdict":"ok"} 또는 {"verdict":"warn","reason":"작성자에게 건넬 한 문장"}
 reason에는 글의 내용을 그대로 옮겨 적지 말고, 무엇이 걸리는지만 짧게 한국어로 적으세요.`;

@@ -80,9 +80,16 @@ export default async function WorkRoomPage({
           <div className="notice-dark" role="status">
             진도를 <b>{stageLabel(previous)}</b>에서 <b>{stageLabel(progress)}</b>로
             바꿨습니다. {raised ? "새로 열린 글" : "다시 잠긴 글"} <b>{movedCount}편</b>
-            {raised
-              ? " — 아래 게시판에서 확인해 보세요."
-              : " — 글은 지워지지 않고, 진도를 다시 올리면 열립니다."}
+            {raised ? "." : " — 글은 지워지지 않고, 진도를 다시 올리면 열립니다."}
+            {/* 진도를 정한 다음 할 일. 읽을 수 있게 된 글로 바로 보낸다. */}
+            <span className="row" style={{ gap: 8, marginTop: 12 }}>
+              <Link className="btn btn-primary" href={boardPath(workId, "question")}>
+                질문 보기
+              </Link>
+              <Link className="btn" href={boardPath(workId, "interpretation")}>
+                해석 보기
+              </Link>
+            </span>
           </div>
         )}
         <div style={{ display: "flex", flexWrap: "wrap", gap: "28px 48px", alignItems: "flex-start" }}>

@@ -55,7 +55,12 @@ export type Comment = {
   parent_id: string | null;
   author_id: string;
   author_name: string;
-  body: string;
+  /** 감춰진 댓글이면 null. 쿼리 단계에서 빼므로 본문이 화면까지 오지 않는다. */
+  body: string | null;
+  /** 작성 당시 작성자의 진도. 예전 댓글은 글의 기준 회차로 메운다. */
+  author_progress: number;
+  /** 내 진도보다 앞선 시점에 쓰인 댓글인가. true면 자리만 남기고 본문은 없다. */
+  locked: boolean;
   is_demo_seed: boolean;
   created_at: string;
 };

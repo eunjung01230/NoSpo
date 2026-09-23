@@ -46,11 +46,9 @@ import {
 import {
   BOARD_COMMENTS,
   BOARD_LABELS,
-  FREE_STAGE,
   commentNoun,
   boardPath,
   isProgressUnit,
-  isUngated,
   toBoardType,
   unitNoun,
   type BoardType,
@@ -112,8 +110,8 @@ export type PostFormState = {
 
 /**
  * 작성·수정 공통 검증: 빈 제목·본문, 없는 회차, 내 진도 초과를 서버에서 막는다.
- * 자유 게시판은 회차가 없는 게시판이라 max_stage를 0으로만 받는다. 0은 어떤 진도보다도
- * 작거나 같으므로 `max_stage <= 진도`라는 공개 조건을 건드리지 않고 모두에게 열린다.
+ * 게시판에 따른 예외는 없다. 자유 게시판도 회차를 받아 같은 공개 조건
+ * (`max_stage <= 읽는 사람의 진도`)을 그대로 따른다.
  */
 async function validate(
   userId: string,
@@ -125,11 +123,6 @@ async function validate(
 ) {
   if (!title) return "제목을 입력해 주세요.";
   if (!body) return "본문을 입력해 주세요.";
-  if (isUngated(boardType)) {
-    return maxStage === FREE_STAGE
-      ? null
-      : "자유 게시판 글에는 회차를 지정하지 않습니다.";
-  }
   const stages = await listStages(workId);
   if (!Number.isInteger(maxStage) || !stages.some((s) => s.stage_no === maxStage)) {
     return "작품에 존재하지 않는 회차입니다.";
@@ -141,9 +134,9 @@ async function validate(
   return null;
 }
 
-/** 폼이 보낸 회차 값. 자유 게시판이면 클라이언트 값과 무관하게 0으로 고정한다. */
-function stageFromForm(boardType: BoardType, formData: FormData) {
-  return isUngated(boardType) ? FREE_STAGE : Number(formData.get("maxStage"));
+/** 폼이 보낸 회차 값. 모든 게시판이 같은 필드를 쓴다. */
+function stageFromForm(formData: FormData) {
+  return Number(formData.get("maxStage"));
 }
 
 /**
@@ -186,7 +179,7 @@ export async function createPostAction(
   const boardType = toBoardType(formData.get("boardType"));
   const title = String(formData.get("title") ?? "").trim();
   const body = String(formData.get("body") ?? "").trim();
-  const maxStage = stageFromForm(boardType, formData);
+  const maxStage = stageFromForm(formData);
 
   const values = { title, body, maxStage };
   const error = await validate(user.id, workId, boardType, title, body, maxStage);
@@ -225,7 +218,7 @@ export async function updatePostAction(
   const boardType = toBoardType(formData.get("boardType"));
   const title = String(formData.get("title") ?? "").trim();
   const body = String(formData.get("body") ?? "").trim();
-  const maxStage = stageFromForm(boardType, formData);
+  const maxStage = stageFromForm(formData);
 
   const values = { title, body, maxStage };
   const error = await validate(user.id, workId, boardType, title, body, maxStage);
@@ -302,7 +295,9 @@ export async function createCommentAction(
     return { error: "답글을 달 수 없는 댓글입니다." };
   }
 
-  await createComment({ postId, authorId: user.id, body, parentId });
+  // 지금 내 진도를 함께 남긴다. 나보다 앞서 본 사람의 댓글은 뒤에 있는 사람에게 감춰진다.
+  const authorProgress = await getProgress(user.id, workId);
+  await createComment({ postId, authorId: user.id, body, parentId, authorProgress });
   revalidatePath(`/works/${workId}/posts/${postId}`);
   return {};
 }

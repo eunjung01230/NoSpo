@@ -24,6 +24,9 @@ export default async function SearchPage({
       <section className="container stack" style={{ gap: 14, paddingBlock: "28px 24px" }}>
         <span className="eyebrow">작품 검색</span>
         <h1 className="page-title">무엇을 보고 오셨나요</h1>
+        <span className="muted">
+          작품을 고르면 내 진도를 정하고, 그 지점까지 열린 질문과 해석을 읽을 수 있어요.
+        </span>
         <form className="search-bar" action="/search">
           <label className="sr-only" htmlFor="q">
             작품명

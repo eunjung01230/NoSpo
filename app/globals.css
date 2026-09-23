@@ -130,6 +130,8 @@ h1, h2, h3 { font-family: var(--ns-serif); font-weight: 400; }
 .btn-primary:hover { background: var(--ns-primary-hi); border-color: var(--ns-primary-hi); }
 .btn[aria-pressed="true"] { background: var(--ns-paper); border-color: var(--ns-paper); color: var(--ns-ink); }
 .btn:disabled { opacity: 0.55; cursor: default; }
+/* 첫 화면의 첫 행동. 톤은 그대로 두고 크기만 한 단계 키운다. */
+.btn-lg { font-size: 15.5px; padding: 14px 24px; }
 .btn-on-paper { border-color: var(--ns-muted); color: var(--ns-ink); }
 .btn-on-paper:hover { background: var(--ns-paper-hi); border-color: #A2917C; color: var(--ns-ink); }
 .btn-on-paper[aria-pressed="true"] { background: var(--ns-primary); border-color: var(--ns-primary); color: var(--ns-text); }
@@ -415,13 +417,6 @@ textarea.field { min-height: 300px; resize: vertical; line-height: 1.85; }
 }
 .rec-card .meta { font-family: var(--ns-mono); font-size: 11px; color: var(--ns-muted-dim); }
 
-/* ---------- 자유 게시판 행 ---------- */
-.post-row-free { grid-template-columns: 62px minmax(0, 1fr); gap: 16px; }
-.post-row-free .open {
-  font-size: 11.5px; color: var(--ns-primary); border: 1px solid #C4A69C;
-  border-radius: 2px; padding: 2px 0; text-align: center; margin-top: 4px;
-}
-
 /* ---------- 댓글 ---------- */
 .cmt { font-family: var(--ns-mono); font-size: 11px; color: var(--ns-primary); }
 .comments { padding: clamp(20px, 5%, 32px); display: flex; flex-direction: column; gap: 16px; }
@@ -429,6 +424,19 @@ textarea.field { min-height: 300px; resize: vertical; line-height: 1.85; }
 .comments-head h2 { margin: 0; font-size: 21px; color: var(--ns-ink); }
 .comments-head .mono { color: var(--ns-primary); }
 .comments-head .desc { font-size: 12.5px; color: var(--ns-ink-faint); }
+/* 댓글 입력칸 바로 위, 이 대화가 어느 회차까지의 자리인지 밝히는 줄 */
+.comment-scope {
+  font-size: 13px; line-height: 1.6; color: var(--ns-ink);
+  border-left: 2px solid var(--ns-primary); padding: 2px 0 2px 12px;
+}
+
+/* 내 진도 이후에 쓰인 댓글 자리. 본문은 서버에서 오지 않는다. */
+.comment-locked {
+  gap: 2px; padding: 12px 14px; border: 1px dashed #C9BCA9; border-radius: 2px;
+  font-size: 13px; color: var(--ns-ink-muted); background: var(--ns-paper-hi);
+}
+.comment-locked .hint { font-size: 12px; color: var(--ns-ink-faint); }
+
 .comment-empty { margin: 0; font-size: 14px; color: var(--ns-ink-muted); }
 .comment-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .comment {

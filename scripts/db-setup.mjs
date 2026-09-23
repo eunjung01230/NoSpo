@@ -81,6 +81,10 @@ await db`alter table comments add column if not exists parent_id uuid
   references comments(id) on delete cascade`;
 await db`create index if not exists comments_parent_idx on comments (parent_id)`;
 
+// 댓글을 쓸 당시 작성자의 진도. 읽는 사람의 진도보다 앞서면 그 댓글은 감춘다.
+// 이 값이 없는 예전 댓글은 조회할 때 글의 기준 회차로 메운다(데이터는 지우지 않는다).
+await db`alter table comments add column if not exists author_progress int`;
+
 // 분야(영화/드라마/애니/만화/책) · 국내외 구분 · 장르는 works를 확장해서 담는다.
 await db`alter table works add column if not exists category text`;
 await db`alter table works add column if not exists origin text`;
@@ -404,60 +408,104 @@ for (const [id, workId, board, author, stage, title, body] of seeds) {
     on conflict (id) do nothing`;
 }
 
-// 자유 게시판 시연 글. 진도 제한이 없으므로 max_stage는 0으로 넣고,
-// 작품의 전개·결말을 적지 않은 잡담만 담는다.
+// 자유 게시판 시연 글. '자유'는 주제의 자유일 뿐이라 다른 게시판과 똑같이 회차를 받고,
+// 같은 공개 조건(max_stage <= 읽는 사람의 진도)을 따른다.
 const freeSeeds = [
-  ["f0000000-0000-4000-8000-000000000001", "squid-game-s1", "user-a",
+  ["f0000000-0000-4000-8000-000000000001", "squid-game-s1", "user-a", 1,
    "다들 몇 화씩 끊어서 보시나요",
-   "진도 제한이 없는 방이라 편하게 물어봅니다. 저는 하루 한 화씩 보는 중인데, 몰아보는 분들도 많더라고요."],
-  ["f0000000-0000-4000-8000-000000000002", "attack-on-titan-s1", "user-b",
-   "아직 시작 전인 분들께",
-   "작품 내용은 적지 않을게요. 한 화가 짧은 편이라 생각보다 진도가 빨리 나갑니다."],
-  ["f0000000-0000-4000-8000-000000000003", "one-piece-manga", "user-a",
+   "1화까지 본 기준에서 여쭤봅니다. 저는 하루 한 화씩 보는 중인데, 몰아보는 분들도 많더라고요."],
+  ["f0000000-0000-4000-8000-000000000005", "squid-game-s1", "user-b", 6,
+   "6화쯤부터는 자막 켜고 보게 되네요",
+   "6화까지 본 사람끼리 보는 글입니다. 내용 이야기는 빼고, 이 구간부터 소리가 작게 느껴져서 자막을 켰다는 이야기만요."],
+  ["f0000000-0000-4000-8000-000000000002", "attack-on-titan-s1", "user-b", 1,
+   "한 화가 짧아서 진도가 빨리 나가요",
+   "1화까지 본 기준의 잡담입니다. 작품 내용은 적지 않을게요. 한 화 길이가 짧은 편이라 생각보다 금방 넘어갑니다."],
+  ["f0000000-0000-4000-8000-000000000003", "one-piece-manga", "user-a", 1,
    "종이책과 전자책 중에 어떤 쪽으로 보세요",
-   "권수가 많아서 보관이 고민입니다. 내용 이야기 없이 읽는 방법만 여쭤봐요."],
-  ["f0000000-0000-4000-8000-000000000004", "interstellar", "user-a",
-   "아직 안 본 사람도 들어올 수 있는 방",
-   "이 게시판은 진도와 상관없이 열려 있어서, 작품 이야기 대신 언제 볼지 같은 잡담을 남겨요."],
+   "1권까지 읽은 기준입니다. 권수가 많아서 보관이 고민입니다. 내용 이야기 없이 읽는 방법만 여쭤봐요."],
+  ["f0000000-0000-4000-8000-000000000004", "interstellar", "user-a", 1,
+   "본 사람끼리 나누는 잡담",
+   "이 작품을 본 분들과 나누는 잡담입니다. 작품 이야기 대신 어떤 화면으로 보셨는지가 궁금해요."],
 ];
 
-for (const [id, workId, author, title, body] of freeSeeds) {
+for (const [id, workId, author, stage, title, body] of freeSeeds) {
   await db`insert into posts (id, work_id, board_type, author_id, title, body, max_stage, is_demo_seed)
-    values (${id}, ${workId}, 'free', ${author}, ${title}, ${body}, 0, true)
+    values (${id}, ${workId}, 'free', ${author}, ${title}, ${body}, ${stage}, true)
     on conflict (id) do nothing`;
 }
 
-// 시연 댓글. 댓글은 그 글이 지금 공개되는 사람에게만 보인다(판정은 조회할 때 서버에서 한다).
+// 예전 자유 게시판 글은 max_stage가 0이라 진도가 없는 사람에게도 열려 있었다.
+// 회차가 없는 글은 더 이상 없으므로 첫 회차 기준으로 끌어올린다.
+await db`update posts set max_stage = 1 where max_stage = 0`;
+await db`update posts set title = '다들 몇 화씩 끊어서 보시나요',
+    body = '1화까지 본 기준에서 여쭤봅니다. 저는 하루 한 화씩 보는 중인데, 몰아보는 분들도 많더라고요.'
+  where id = 'f0000000-0000-4000-8000-000000000001' and is_demo_seed`;
+await db`update posts set title = '한 화가 짧아서 진도가 빨리 나가요',
+    body = '1화까지 본 기준의 잡담입니다. 작품 내용은 적지 않을게요. 한 화 길이가 짧은 편이라 생각보다 금방 넘어갑니다.'
+  where id = 'f0000000-0000-4000-8000-000000000002' and is_demo_seed`;
+await db`update posts set body = '1권까지 읽은 기준입니다. 권수가 많아서 보관이 고민입니다. 내용 이야기 없이 읽는 방법만 여쭤봐요.'
+  where id = 'f0000000-0000-4000-8000-000000000003' and is_demo_seed`;
+await db`update posts set title = '본 사람끼리 나누는 잡담',
+    body = '이 작품을 본 분들과 나누는 잡담입니다. 작품 이야기 대신 어떤 화면으로 보셨는지가 궁금해요.'
+  where id = 'f0000000-0000-4000-8000-000000000004' and is_demo_seed`;
+
+// 시연 댓글. 댓글은 그 글이 지금 공개되는 사람에게만 보이고, 그 안에서도
+// '쓴 사람의 그때 진도 <= 읽는 사람의 지금 진도'인 댓글만 본문이 열린다.
+// 네 번째 값이 작성 당시 작성자의 진도다.
 const commentSeeds = [
-  ["c0000000-0000-4000-8000-000000000001", "11111111-1111-4111-8111-000000000003", "user-b",
+  ["c0000000-0000-4000-8000-000000000001", "11111111-1111-4111-8111-000000000003", "user-b", 3,
    "같은 3화까지 본 입장에서 공감합니다. 인물 소개가 부담스럽지 않게 들어와서 좋았어요."],
-  ["c0000000-0000-4000-8000-000000000002", "11111111-1111-4111-8111-000000000303", "user-b",
+  ["c0000000-0000-4000-8000-000000000002", "11111111-1111-4111-8111-000000000303", "user-b", 3,
    "저도 이 구간까지는 편하게 봤습니다. 뒤 이야기는 여기서 말고 다른 글에서 이어가요."],
-  ["c0000000-0000-4000-8000-000000000003", "cccccccc-cccc-4ccc-8ccc-000000000002", "user-a",
+  ["c0000000-0000-4000-8000-000000000003", "cccccccc-cccc-4ccc-8ccc-000000000002", "user-a", 1,
    "공간의 높낮이 이야기 잘 봤습니다. 다시 볼 때 그 부분을 눈여겨보려고요."],
-  ["c0000000-0000-4000-8000-000000000004", "f0000000-0000-4000-8000-000000000001", "user-b",
-   "저는 두 화씩 끊어 봅니다. 자유 게시판이라 진도 상관없이 이야기할 수 있어 좋네요."],
-  ["c0000000-0000-4000-8000-000000000005", "11111111-1111-4111-8111-000000000102", "user-b",
-   "저도 2화까지만 봤습니다. 같은 지점에서 궁금했던 걸 적어둘게요."],
+  ["c0000000-0000-4000-8000-000000000004", "f0000000-0000-4000-8000-000000000001", "user-b", 1,
+   "저는 두 화씩 끊어 봅니다. 한 번에 몰아보면 장면이 섞여서 오히려 기억이 덜 나더라고요."],
+  // 질문 게시판의 답글은 '저도 궁금해요'가 아니라 그 회차까지의 단서로 답하는 예시다.
+  ["c0000000-0000-4000-8000-000000000005", "11111111-1111-4111-8111-000000000102", "user-b", 2,
+   "같은 2화까지 본 기준으로 답해봅니다. 저는 인물을 소개할 때 대사보다 손이나 표정을 먼저 보여주는 편집이 가장 인상적이었어요. 말로 설명하지 않아도 어떤 사람인지 짐작하게 만드는 방식이라, 여기까지만 봐도 인물 구분이 어렵지 않았습니다."],
+  // 같은 질문에 8화까지 본 사람이 나중에 남긴 답글. 3화인 사용자에게는 자리만 보인다.
+  ["c0000000-0000-4000-8000-000000000006", "11111111-1111-4111-8111-000000000102", "user-b", 8,
+   "8화까지 보고 다시 오니 앞부분을 다르게 읽게 되네요. 뒤를 아는 상태에서 쓴 이야기라 여기서는 자세히 적지 않겠습니다."],
 ];
 
 // 답글(대댓글) 시연 데이터. parent_id로 위 댓글에 매단다.
 const replySeeds = [
   ["c0000000-0000-4000-8000-000000000101", "11111111-1111-4111-8111-000000000003",
-   "c0000000-0000-4000-8000-000000000001", "user-a",
+   "c0000000-0000-4000-8000-000000000001", "user-a", 3,
    "읽어주셔서 고맙습니다. 같은 구간에서 비슷하게 느끼셨군요."],
+  // 질문자(user-a)가 답글에 다시 답하며 2화까지의 단서로만 해석을 이어간다.
+  ["c0000000-0000-4000-8000-000000000102", "11111111-1111-4111-8111-000000000102",
+   "c0000000-0000-4000-8000-000000000005", "user-a", 2,
+   "편집 이야기 덕분에 정리가 됐어요. 저는 같은 2화까지에서 배경 소리가 인물의 긴장을 대신 말해준다고 느꼈는데, 두 가지가 같은 방향으로 쓰인 것 같네요."],
 ];
 
-for (const [id, postId, author, body] of commentSeeds) {
-  await db`insert into comments (id, post_id, author_id, body, is_demo_seed)
-    values (${id}, ${postId}, ${author}, ${body}, true)
+for (const [id, postId, author, stage, body] of commentSeeds) {
+  await db`insert into comments (id, post_id, author_id, body, author_progress, is_demo_seed)
+    values (${id}, ${postId}, ${author}, ${body}, ${stage}, true)
     on conflict (id) do nothing`;
+  // 컬럼을 새로 더하기 전에 등록된 시연 댓글에도 같은 값을 채운다(비어 있을 때만).
+  await db`update comments set author_progress = ${stage}
+    where id = ${id} and is_demo_seed and author_progress is null`;
 }
 
-for (const [id, postId, parentId, author, body] of replySeeds) {
-  await db`insert into comments (id, post_id, parent_id, author_id, body, is_demo_seed)
-    values (${id}, ${postId}, ${parentId}, ${author}, ${body}, true)
+// 이미 등록된 시연 답글 중 '저도 궁금해요'로 끝나던 것만 해석 예시로 바꾼다.
+// 시연 데이터(is_demo_seed)에만, 그것도 예전 문장 그대로일 때만 손댄다.
+await db`update comments
+  set body = '같은 2화까지 본 기준으로 답해봅니다. 저는 인물을 소개할 때 대사보다 손이나 표정을 먼저 보여주는 편집이 가장 인상적이었어요. 말로 설명하지 않아도 어떤 사람인지 짐작하게 만드는 방식이라, 여기까지만 봐도 인물 구분이 어렵지 않았습니다.'
+  where id = 'c0000000-0000-4000-8000-000000000005' and is_demo_seed
+    and body = '저도 2화까지만 봤습니다. 같은 지점에서 궁금했던 걸 적어둘게요.'`;
+await db`update comments
+  set body = '저는 두 화씩 끊어 봅니다. 한 번에 몰아보면 장면이 섞여서 오히려 기억이 덜 나더라고요.'
+  where id = 'c0000000-0000-4000-8000-000000000004' and is_demo_seed
+    and body = '저는 두 화씩 끊어 봅니다. 자유 게시판이라 진도 상관없이 이야기할 수 있어 좋네요.'`;
+
+for (const [id, postId, parentId, author, stage, body] of replySeeds) {
+  await db`insert into comments (id, post_id, parent_id, author_id, body, author_progress, is_demo_seed)
+    values (${id}, ${postId}, ${parentId}, ${author}, ${body}, ${stage}, true)
     on conflict (id) do nothing`;
+  await db`update comments set author_progress = ${stage}
+    where id = ${id} and is_demo_seed and author_progress is null`;
 }
 
 console.log("스키마 생성과 시연 데이터 등록을 완료했습니다.");

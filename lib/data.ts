@@ -66,7 +66,9 @@ export async function listVisiblePosts(
   return (await db`
     select p.id, p.work_id, p.board_type, p.author_id, u.display_name as author_name,
            p.title, p.body, p.max_stage, s.label as stage_label, p.is_demo_seed,
-           (select count(*)::int from comments c where c.post_id = p.id) as comment_count,
+           (select count(*)::int from comments c
+              where c.post_id = p.id
+                and coalesce(c.author_progress, p.max_stage) <= ${progress}) as comment_count,
            to_char(p.created_at, 'YYYY-MM-DD HH24:MI') as created_at
     from posts p
       join users u on u.id = p.author_id
@@ -310,6 +312,13 @@ export async function countPostsBetween(
 /**
  * 댓글 조회. 댓글은 글에 딸린 것이므로 권한도 글과 같다 —
  * 지금 그 글이 공개되지 않으면 댓글도 한 줄도 내려보내지 않는다.
+ *
+ * 글이 열려 있어도 댓글은 한 번 더 거른다: 댓글을 쓸 당시 작성자의 진도가
+ * 읽는 사람의 지금 진도보다 앞서면 본문을 select에서 빼고 자리만 남긴다.
+ * (CSS로 가리는 것이 아니라 본문이 서버 응답에 아예 담기지 않는다.)
+ * 이 규칙은 글쓴이 본인에게도 똑같이 적용한다.
+ * author_progress가 없는 예전 댓글은 글의 기준 회차로 메운다 — 그 글이 열렸다면
+ * 기준 회차는 이미 읽는 사람의 진도 이하이므로 지금처럼 그대로 보인다.
  */
 export async function listComments(
   userId: string,
@@ -319,9 +328,14 @@ export async function listComments(
   const post = await getVisiblePost(userId, workId, postId);
   if (!post) return null;
   const db = sql();
+  const progress = await getProgress(userId, workId);
   return (await db`
     select c.id, c.post_id, c.parent_id, c.author_id, u.display_name as author_name,
-           c.body, c.is_demo_seed,
+           coalesce(c.author_progress, ${post.max_stage}) as author_progress,
+           coalesce(c.author_progress, ${post.max_stage}) > ${progress} as locked,
+           case when coalesce(c.author_progress, ${post.max_stage}) > ${progress}
+                then null else c.body end as body,
+           c.is_demo_seed,
            to_char(c.created_at, 'YYYY-MM-DD HH24:MI') as created_at
     from comments c
       join users u on u.id = c.author_id
@@ -330,16 +344,19 @@ export async function listComments(
   `) as Comment[];
 }
 
+/** 댓글을 쓸 때 그 사람의 그때 진도를 함께 남긴다. 나중에 진도를 올려도 이 값은 그대로다. */
 export async function createComment(input: {
   postId: string;
   authorId: string;
   body: string;
   parentId?: string | null;
+  authorProgress: number;
 }) {
   const db = sql();
   await db`
-    insert into comments (post_id, parent_id, author_id, body, is_demo_seed)
-    values (${input.postId}, ${input.parentId ?? null}, ${input.authorId}, ${input.body}, false)
+    insert into comments (post_id, parent_id, author_id, body, author_progress, is_demo_seed)
+    values (${input.postId}, ${input.parentId ?? null}, ${input.authorId}, ${input.body},
+            ${input.authorProgress}, false)
   `;
 }
 

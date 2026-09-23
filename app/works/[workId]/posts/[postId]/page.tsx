@@ -20,6 +20,7 @@ import {
   BOARD_LABELS,
   BOARD_NUMERALS,
   boardPath,
+  commentScopeNote,
   stageTag,
 } from "@/lib/boards";
 
@@ -187,6 +188,11 @@ export default async function PostDetailPage({
           currentUserId={user.id}
           userLabel={user.display_name}
           noun={commentNoun(post.board_type)}
+          scopeNote={commentScopeNote(
+            post.board_type,
+            post.stage_label,
+            work.progress_unit
+          )}
         />
       )}
 

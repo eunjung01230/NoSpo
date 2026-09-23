@@ -36,7 +36,7 @@ function PostLine({ p }: { p: ModerationPost }) {
     <span className="stack" style={{ gap: 4, minWidth: 0 }}>
       <span className="admin-title">{p.title}</span>
       <span className="admin-meta">
-        {p.work_title} · {BOARD_LABELS[p.board_type]} · {p.stage_label ?? "진도 제한 없음"} ·{" "}
+        {p.work_title} · {BOARD_LABELS[p.board_type]} · {p.stage_label ?? "회차 미지정"} ·{" "}
         {p.author_name} · {p.created_at}
       </span>
     </span>

@@ -13,7 +13,7 @@ import {
   setProgress,
   updateOwnPost,
 } from "@/lib/data";
-import { toBoardType } from "@/lib/boards";
+import { boardPath, toBoardType } from "@/lib/boards";
 
 /** 시연 사용자 전환. 쿠키에는 서버에서 확인한 사용자 id만 저장한다. */
 export async function switchUserAction(formData: FormData) {
@@ -89,7 +89,7 @@ export async function createPostAction(
 
   await createPost({ workId, boardType, authorId: user.id, title, body, maxStage });
   revalidatePath(`/works/${workId}`);
-  redirect(`/works/${workId}?board=${boardType}`);
+  redirect(boardPath(workId, boardType));
 }
 
 /** 수정. 소유권은 SQL 조건으로 확인하고 클라이언트가 보낸 작성자 값은 믿지 않는다. */
@@ -129,5 +129,5 @@ export async function deletePostAction(formData: FormData) {
   if (!ok) throw new Error("내가 쓴 글만 삭제할 수 있습니다.");
 
   revalidatePath(`/works/${workId}`);
-  redirect(`/works/${workId}?board=${boardType}`);
+  redirect(boardPath(workId, boardType));
 }

@@ -2,8 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getOwnPost, getProgress, getWork, listStages } from "@/lib/data";
 import { getCurrentUser } from "@/lib/session";
-import { BOARD_LABELS, stageQuestion, unitNoun } from "@/lib/boards";
-import PostForm from "../../../new/PostForm";
+import { BOARD_TITLES, stageQuestion, unitNoun } from "@/lib/boards";
+import PostForm from "../../../PostForm";
 
 export const dynamic = "force-dynamic";
 
@@ -40,7 +40,7 @@ export default async function EditPostPage({
       <p className="muted">
         <Link href={`/works/${workId}/posts/${postId}`}>← 감상 상세</Link>
       </p>
-      <h1>{BOARD_LABELS[post.board_type]} 글 수정</h1>
+      <h1>{BOARD_TITLES[post.board_type]} 글 수정</h1>
       <p className="muted">{work.title} · 작성자 {user.display_name}(시연 사용자)</p>
       <PostForm workId={work.id} boardType={post.board_type} stages={selectable}
                 unit={unitNoun(work.progress_unit)}

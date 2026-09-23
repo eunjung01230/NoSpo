@@ -8,7 +8,7 @@ import {
 } from "@/app/actions";
 import type { Stage } from "@/lib/types";
 import type { BoardType } from "@/lib/boards";
-import { BOARD_LABELS } from "@/lib/boards";
+import { BOARD_TITLES } from "@/lib/boards";
 
 /** 작성과 수정이 같은 폼을 쓴다. postId가 있으면 수정 모드다. */
 export default function PostForm({
@@ -37,7 +37,7 @@ export default function PostForm({
       <input type="hidden" name="boardType" value={boardType} />
       {post && <input type="hidden" name="postId" value={post.id} />}
 
-      <p className="muted">게시판: {BOARD_LABELS[boardType]}</p>
+      <p className="muted">게시판: {BOARD_TITLES[boardType]}</p>
 
       <label htmlFor="maxStage">{question}</label>
       <select id="maxStage" name="maxStage"

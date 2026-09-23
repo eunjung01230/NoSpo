@@ -2,24 +2,30 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getProgress, getWork, listStages } from "@/lib/data";
 import { getCurrentUser } from "@/lib/session";
-import { BOARD_LABELS, stageQuestion, toBoardType, unitNoun } from "@/lib/boards";
-import PostForm from "./PostForm";
+import {
+  BOARD_DESCRIPTIONS,
+  BOARD_TITLES,
+  boardPath,
+  slugToBoard,
+  stageQuestion,
+  unitNoun,
+} from "@/lib/boards";
+import PostForm from "../../PostForm";
 
 export const dynamic = "force-dynamic";
 
 export default async function NewPostPage({
   params,
-  searchParams,
 }: {
-  params: Promise<{ workId: string }>;
-  searchParams: Promise<{ board?: string }>;
+  params: Promise<{ workId: string; board: string }>;
 }) {
-  const { workId } = await params;
-  const { board } = await searchParams;
+  const { workId, board } = await params;
+  const boardType = slugToBoard(board);
+  if (!boardType) notFound();
+
   const work = await getWork(workId);
   if (!work) notFound();
 
-  const boardType = toBoardType(board);
   const user = await getCurrentUser();
   const [stages, progress] = await Promise.all([
     listStages(workId),
@@ -33,9 +39,10 @@ export default async function NewPostPage({
   return (
     <>
       <p className="muted">
-        <Link href={`/works/${workId}?board=${boardType}`}>← {work.title}</Link>
+        <Link href={boardPath(workId, boardType)}>← {BOARD_TITLES[boardType]}</Link>
       </p>
-      <h1>{BOARD_LABELS[boardType]} 글쓰기</h1>
+      <h1>{BOARD_TITLES[boardType]} 글쓰기</h1>
+      <p className="muted">{BOARD_DESCRIPTIONS[boardType]}</p>
       <p className="muted">
         {work.title} · 작성자 {user.display_name}(시연 사용자), 현재 진도 {currentLabel}
       </p>

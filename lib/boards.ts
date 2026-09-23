@@ -1,6 +1,14 @@
-/** 글 게시판 타입. posts.board_type 값과 1:1로 대응한다. */
+/** 글 게시판 타입. posts.board_type 값과 1:1로 대응한다(게시판별 테이블은 없다). */
 export const BOARD_TYPES = ["review", "question", "interpretation", "recap"] as const;
 export type BoardType = (typeof BOARD_TYPES)[number];
+
+/** URL 경로용 슬러그. 화면에서 게시판이 서로 다른 공간으로 보이도록 주소도 나눈다. */
+export const BOARD_SLUGS: Record<BoardType, string> = {
+  review: "impressions",
+  question: "questions",
+  interpretation: "analysis",
+  recap: "reviews",
+};
 
 export const BOARD_LABELS: Record<BoardType, string> = {
   review: "감상",
@@ -9,11 +17,19 @@ export const BOARD_LABELS: Record<BoardType, string> = {
   recap: "후기",
 };
 
-export const BOARD_HINTS: Record<BoardType, string> = {
-  review: "내가 본 범위 안에서 나눈 감상입니다.",
-  question: "내가 본 회차까지의 내용에 대해 묻는 공간입니다.",
-  interpretation: "장면·인물·복선에 대한 해석을 기록합니다.",
-  recap: "지금까지 본 구간에 대한 짧은 후기입니다.",
+/** 게시판 목록 화면에 쓰는 고유 제목과 설명. */
+export const BOARD_TITLES: Record<BoardType, string> = {
+  review: "감상 게시판",
+  question: "질문 게시판",
+  interpretation: "해석 게시판",
+  recap: "후기 게시판",
+};
+
+export const BOARD_DESCRIPTIONS: Record<BoardType, string> = {
+  review: "지금까지 본 내용에 대한 자유로운 감상을 나눕니다.",
+  question: "현재 진도까지의 정보로 묻고 답하는 공간입니다.",
+  interpretation: "인물, 복선, 장면의 의미에 대한 해석을 기록합니다.",
+  recap: "현재까지 본 구간에 대한 정리와 평가를 남깁니다.",
 };
 
 export function isBoardType(v: unknown): v is BoardType {
@@ -22,6 +38,16 @@ export function isBoardType(v: unknown): v is BoardType {
 
 export function toBoardType(v: unknown): BoardType {
   return isBoardType(v) ? v : "review";
+}
+
+/** 슬러그를 게시판 타입으로. 모르는 슬러그는 null이라 404로 처리한다. */
+export function slugToBoard(slug: string): BoardType | null {
+  const hit = BOARD_TYPES.find((b) => BOARD_SLUGS[b] === slug);
+  return hit ?? null;
+}
+
+export function boardPath(workId: string, board: BoardType, mineOnly = false) {
+  return `/works/${workId}/${BOARD_SLUGS[board]}${mineOnly ? "?mine=1" : ""}`;
 }
 
 /**

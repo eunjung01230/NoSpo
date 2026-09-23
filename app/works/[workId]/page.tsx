@@ -1,15 +1,15 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import {
-  countVisibleByBoard,
-  getProgress,
-  getWork,
-  listStages,
-  listVisiblePosts,
-} from "@/lib/data";
+import { notFound, redirect } from "next/navigation";
+import { countVisibleByBoard, getProgress, getWork, listStages } from "@/lib/data";
 import { getCurrentUser } from "@/lib/session";
 import { setProgressAction } from "@/app/actions";
-import { BOARD_HINTS, BOARD_LABELS, BOARD_TYPES, toBoardType } from "@/lib/boards";
+import {
+  BOARD_DESCRIPTIONS,
+  BOARD_TITLES,
+  BOARD_TYPES,
+  boardPath,
+  isBoardType,
+} from "@/lib/boards";
 
 export const dynamic = "force-dynamic";
 
@@ -18,30 +18,24 @@ export default async function WorkRoomPage({
   searchParams,
 }: {
   params: Promise<{ workId: string }>;
-  searchParams: Promise<{ board?: string; mine?: string }>;
+  searchParams: Promise<{ board?: string }>;
 }) {
   const { workId } = await params;
-  const { board, mine } = await searchParams;
+  const { board } = await searchParams;
+  // 게시판은 이제 각자의 주소를 가진다. 예전 ?board= 주소는 그쪽으로 보낸다.
+  if (isBoardType(board)) redirect(boardPath(workId, board));
+
   const work = await getWork(workId);
   if (!work) notFound();
 
-  const boardType = toBoardType(board);
-  const mineOnly = mine === "1";
   const user = await getCurrentUser();
-  const [stages, progress, posts, counts] = await Promise.all([
+  const [stages, progress, counts] = await Promise.all([
     listStages(workId),
     getProgress(user.id, workId),
-    listVisiblePosts(user.id, workId, boardType, mineOnly),
-    countVisibleByBoard(user.id, workId, mineOnly),
+    countVisibleByBoard(user.id, workId),
   ]);
   const currentLabel =
     stages.find((s) => s.stage_no === progress)?.label ?? "아직 보지 않음";
-  const query = (next: { board?: string; mine?: boolean }) => {
-    const p = new URLSearchParams();
-    p.set("board", next.board ?? boardType);
-    if (next.mine ?? mineOnly) p.set("mine", "1");
-    return `/works/${work.id}?${p.toString()}`;
-  };
 
   return (
     <>
@@ -77,50 +71,17 @@ export default async function WorkRoomPage({
       </div>
 
       <h2>게시판</h2>
-      <div className="row" style={{ marginBottom: 10 }}>
-        {BOARD_TYPES.map((b) => (
-          <Link key={b} href={query({ board: b })}
-                className={`btn${b === boardType ? " active" : ""}`}
-                style={{ textDecoration: "none" }}>
-            {BOARD_LABELS[b]} {counts[b] ?? 0}
-          </Link>
-        ))}
-      </div>
-      <p className="muted">{BOARD_HINTS[boardType]}</p>
-      <div className="row" style={{ marginBottom: 10 }}>
-        <Link className={`btn${mineOnly ? " active" : ""}`}
-              href={query({ mine: !mineOnly })} style={{ textDecoration: "none" }}>
-          {mineOnly ? "전체 글 보기" : "내 글만 보기"}
-        </Link>
-        <Link className="btn primary"
-              href={`/works/${work.id}/new?board=${boardType}`}
-              style={{ textDecoration: "none" }}>
-          {BOARD_LABELS[boardType]} 글쓰기
-        </Link>
-      </div>
       <p className="muted">
-        이번 구현에서는 내 진도에서 읽을 수 있는 글만 표시합니다(기능 검증용 임시 방식).
+        네 개의 게시판이 각각 따로 운영됩니다. 어느 게시판에서든 내 진도 이후의 글은 열리지 않습니다.
       </p>
-
-      {posts.length === 0 && (
-        <div className="card muted">
-          {mineOnly
-            ? "이 게시판에 내가 쓴 글이 아직 없습니다."
-            : "지금 진도에서 읽을 수 있는 글이 아직 없습니다."}
-        </div>
-      )}
-      {posts.map((p) => (
-        <div className="card" key={p.id}>
-          <div className="row">
-            <span className="tag">{p.stage_label}까지의 내용</span>
-            {p.is_demo_seed && <span className="badge">시연 데이터</span>}
-            {p.author_id === user.id && <span className="tag">내 글</span>}
-          </div>
-          <h2 style={{ margin: "8px 0 4px" }}>
-            <Link href={`/works/${work.id}/posts/${p.id}`}>{p.title}</Link>
+      {BOARD_TYPES.map((b) => (
+        <div className="card" key={b}>
+          <h2 style={{ margin: "0 0 4px" }}>
+            <Link href={boardPath(work.id, b)}>{BOARD_TITLES[b]}</Link>
           </h2>
+          <p className="muted" style={{ margin: "0 0 8px" }}>{BOARD_DESCRIPTIONS[b]}</p>
           <p className="muted" style={{ margin: 0 }}>
-            {p.author_name} · {p.created_at}
+            지금 읽을 수 있는 글 {counts[b] ?? 0}개
           </p>
         </div>
       ))}

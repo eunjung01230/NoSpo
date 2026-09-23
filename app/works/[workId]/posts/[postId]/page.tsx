@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { getVisiblePost, getProgress, getWork, listStages } from "@/lib/data";
 import { getCurrentUser } from "@/lib/session";
 import { deletePostAction } from "@/app/actions";
-import { BOARD_LABELS } from "@/lib/boards";
+import { BOARD_TITLES, boardPath } from "@/lib/boards";
 
 export const dynamic = "force-dynamic";
 
@@ -44,10 +44,10 @@ export default async function PostDetailPage({
   return (
     <>
       <p className="muted">
-        <Link href={`/works/${workId}?board=${post.board_type}`}>← {work.title}</Link>
+        <Link href={boardPath(workId, post.board_type)}>← {BOARD_TITLES[post.board_type]}</Link>
       </p>
       <div className="row">
-        <span className="tag">{BOARD_LABELS[post.board_type]}</span>
+        <span className="tag">{BOARD_TITLES[post.board_type]}</span>
         <span className="tag">{post.stage_label}까지의 내용</span>
         {post.is_demo_seed && <span className="badge">시연 데이터</span>}
       </div>

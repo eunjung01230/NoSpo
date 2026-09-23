@@ -2,11 +2,13 @@ import Link from "next/link";
 import { getCurrentUser, listDemoUsers } from "@/lib/session";
 import { isDbConfigured } from "@/lib/db";
 import { switchUserAction } from "./actions";
+import BrandMark from "./BrandMark";
 
 /** 워드마크 + 시연 사용자 전환. 전환 로직(서버 액션)은 그대로 쓴다. */
 export default async function SiteHeader() {
   const wordmark = (
-    <Link href="/" className="wordmark">
+    <Link href="/" className="wordmark" aria-label="NoSpo 홈">
+      <BrandMark />
       <span>
         No<s>Spo</s>
       </span>

@@ -46,8 +46,11 @@ export async function setProgressAction(formData: FormData) {
   if (!Number.isInteger(stageNo) || !allowed) {
     throw new Error("작품에 존재하지 않는 회차입니다.");
   }
+  const before = await getProgress(user.id, workId);
   await setProgress(user.id, workId, stageNo);
-  revalidatePath(`/works/${workId}`);
+  revalidatePath(`/works/${workId}`, "layout");
+  // 무엇이 달라졌는지 화면에서 알려주기 위해 이전 진도만 넘긴다(글 내용은 넘기지 않는다).
+  if (before !== stageNo) redirect(`/works/${workId}?from=${before}`);
 }
 
 export type PostFormState = { error?: string };

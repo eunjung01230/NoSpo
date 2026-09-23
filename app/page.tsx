@@ -52,12 +52,16 @@ export default async function WorkBrowsePage() {
             className="muted"
             style={{ margin: 0, maxWidth: "34em", fontSize: 16, lineHeight: 1.8 }}
           >
-            내가 본 지점까지의 정보만으로 작품을 이해하고, 묻고, 해석하고, 감상을 나눕니다.
+            작품마다 내가 본 지점을 정해두면, 글쓴이가 지정한 회차가 그 지점 이하인 글만 열립니다.
+            AI가 본문을 판별하지 않고, 작성자가 고른 회차와 내 진도만 비교합니다.
           </p>
         </div>
         <div className="promise" style={{ flex: "0 1 330px" }}>
           <b>이 방의 약속</b>
-          <p>글에 포함된 마지막 지점이 내 진도 이하일 때만 제목과 본문이 공개됩니다.</p>
+          <p>
+            글에 포함된 마지막 지점이 내 진도 이하일 때만 제목과 본문이 공개됩니다.
+            잠긴 글은 제목도 미리 보여주지 않습니다.
+          </p>
         </div>
       </section>
 

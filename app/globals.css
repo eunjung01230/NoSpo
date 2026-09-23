@@ -369,3 +369,12 @@ textarea.field { min-height: 300px; resize: vertical; line-height: 1.85; }
 
 .poster { overflow: hidden; }
 .poster-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.brandmark { flex: none; display: block; }
+.wordmark { gap: 10px; }
+.wordmark .rule { margin-left: 2px; }
+@media (max-width: 520px) {
+  .wordmark { gap: 8px; font-size: 22px; }
+  .wordmark .tagline { display: none; }
+  .wordmark .rule { display: none; }
+}

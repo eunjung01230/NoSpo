@@ -245,3 +245,38 @@ export async function countByOrigin(category: string): Promise<Record<string, nu
   `) as { origin: string; c: number }[];
   return Object.fromEntries(rows.map((r) => [r.origin, r.c]));
 }
+
+/**
+ * 지금 진도에서 아직 열리지 않은 글 수. 개수만 세고 제목·본문은 읽지 않는다.
+ * 잠긴 글이 있다는 사실만 알려주기 위한 값이다.
+ */
+export async function countLockedByBoard(
+  userId: string,
+  workId: string
+): Promise<Record<string, number>> {
+  const db = sql();
+  const progress = await getProgress(userId, workId);
+  const rows = (await db`
+    select board_type, count(*)::int as c
+    from posts
+    where work_id = ${workId} and max_stage > ${progress}
+    group by board_type
+  `) as { board_type: string; c: number }[];
+  return Object.fromEntries(rows.map((r) => [r.board_type, r.c]));
+}
+
+/** 진도를 옮겼을 때 새로 열린(또는 다시 잠긴) 글 수. 역시 개수만 센다. */
+export async function countPostsBetween(
+  workId: string,
+  from: number,
+  to: number
+): Promise<number> {
+  const db = sql();
+  const lo = Math.min(from, to);
+  const hi = Math.max(from, to);
+  const rows = (await db`
+    select count(*)::int as c from posts
+    where work_id = ${workId} and max_stage > ${lo} and max_stage <= ${hi}
+  `) as { c: number }[];
+  return rows[0]?.c ?? 0;
+}

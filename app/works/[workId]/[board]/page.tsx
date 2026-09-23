@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
+  countLockedByBoard,
   countVisibleByBoard,
   getProgress,
   getWork,
@@ -57,12 +58,15 @@ export default async function BoardPage({
 
   const mineOnly = mine === "1";
   const user = await getCurrentUser();
-  const [stages, progress, posts, counts] = await Promise.all([
+  const [stages, progress, posts, counts, locked] = await Promise.all([
     listStages(workId),
     getProgress(user.id, workId),
     listVisiblePosts(user.id, workId, boardType, mineOnly),
     countVisibleByBoard(user.id, workId, mineOnly),
+    countLockedByBoard(user.id, workId),
   ]);
+  // 잠긴 글은 개수만 센다. 제목·본문은 조회하지 않는다.
+  const lockedHere = locked[boardType] ?? 0;
   const currentLabel =
     stages.find((s) => s.stage_no === progress)?.label ?? "시작 전";
   const href = (p: VisiblePost) => `/works/${workId}/posts/${p.id}`;
@@ -121,7 +125,8 @@ export default async function BoardPage({
             {boardType === "question" && (
               <div className="sheet-note">
                 묻는 사람이 본 회차가 곧 대화의 경계예요. 질문자가 본 지점 이후의 전개는
-                꺼내지 않기로 해요.
+                꺼내지 않기로 해요. 이번 버전에는 답글 기능이 없어, 질문은 같은 진도에서
+                각자 글로 이어집니다.
               </div>
             )}
 
@@ -136,6 +141,7 @@ export default async function BoardPage({
               </Link>
               <span>
                 {posts.length}편 · {mineOnly ? "내가 쓴 글" : "지금 열람 가능한 글"}
+                {lockedHere > 0 && ` · 내 진도 이후 ${lockedHere}편 잠김`}
               </span>
             </div>
 
@@ -145,7 +151,9 @@ export default async function BoardPage({
                 <span>
                   {mineOnly
                     ? "이 게시판에서 첫 글을 남겨보세요."
-                    : "진도를 올리면 더 많은 글이 열립니다."}
+                    : lockedHere > 0
+                      ? `이 게시판에는 내 진도(${currentLabel}) 이후의 글 ${lockedHere}편이 있습니다. 진도를 올리면 열립니다.`
+                      : "이 게시판의 첫 글을 남겨보세요."}
                 </span>
               </div>
             )}

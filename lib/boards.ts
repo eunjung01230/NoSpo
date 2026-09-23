@@ -27,7 +27,7 @@ export const BOARD_TITLES: Record<BoardType, string> = {
 
 export const BOARD_DESCRIPTIONS: Record<BoardType, string> = {
   review: "지금까지 본 내용에 대한 자유로운 감상을 나눕니다.",
-  question: "현재 진도까지의 정보로 묻고 답하는 공간입니다.",
+  question: "내가 본 회차까지의 내용으로 궁금한 점을 남기는 곳입니다.",
   interpretation: "인물, 복선, 장면의 의미에 대한 해석을 기록합니다.",
   recap: "현재까지 본 구간에 대한 정리와 평가를 남깁니다.",
 };

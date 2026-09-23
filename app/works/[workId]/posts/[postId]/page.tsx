@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getVisiblePost, getProgress, getWork, listStages } from "@/lib/data";
 import { getCurrentUser } from "@/lib/session";
-import { deletePostAction } from "@/app/actions";
+import DeletePostButton from "./DeletePostButton";
 import { BOARD_LABELS, BOARD_NUMERALS, boardPath, stageTag } from "@/lib/boards";
 
 export const dynamic = "force-dynamic";
@@ -34,12 +34,14 @@ export default async function PostDetailPage({
         <Link href={`/works/${workId}`} className="backlink">
           ← {work.title}
         </Link>
-        <h1 className="page-title">아직 열람할 수 없는 글입니다</h1>
+        <h1 className="page-title">지금은 볼 수 없는 글입니다</h1>
         <div className="notice-dark notice-warn">
-          이 글에는 {user.display_name}님의 현재 진도({label}) 이후의 내용이 포함되어 있어
-          제목과 본문을 보내지 않습니다.
+          {user.display_name}님의 현재 진도는 {label}입니다. 이 진도 이후의 내용이 담긴
+          글이거나 이미 삭제된 글이라 제목과 본문을 보내지 않습니다.
         </div>
-        <span className="muted">진도를 올리면 열람할 수 있습니다.</span>
+        <span className="muted">
+          진도를 올리면 그 회차까지의 글이 열립니다. 잠긴 글의 제목은 미리 보여주지 않습니다.
+        </span>
       </section>
     );
   }
@@ -95,14 +97,11 @@ export default async function PostDetailPage({
               <Link className="textlink" href={`/works/${workId}/posts/${postId}/edit`}>
                 수정
               </Link>
-              <form action={deletePostAction}>
-                <input type="hidden" name="workId" value={workId} />
-                <input type="hidden" name="postId" value={postId} />
-                <input type="hidden" name="boardType" value={post.board_type} />
-                <button className="textlink textlink-danger" type="submit">
-                  삭제
-                </button>
-              </form>
+              <DeletePostButton
+                workId={workId}
+                postId={postId}
+                boardType={post.board_type}
+              />
             </span>
           )}
         </div>

@@ -1,3 +1,5 @@
+import type { BoardType } from "./boards";
+
 export type DemoUser = {
   id: string;
   display_name: string;
@@ -20,10 +22,13 @@ export type Stage = {
 export type VisiblePost = {
   id: string;
   work_id: string;
+  board_type: BoardType;
+  author_id: string;
   author_name: string;
   title: string;
   body: string;
   max_stage: number;
+  stage_label: string;
   is_demo_seed: boolean;
   created_at: string;
 };

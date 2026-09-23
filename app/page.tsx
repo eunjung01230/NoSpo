@@ -25,7 +25,7 @@ export default async function WorkBrowsePage() {
       <h1>작품 탐색</h1>
       <p className="muted">다 본 사람 말고, 나만큼 본 사람들과.</p>
       <div className="notice">
-        이번 시연에서는 드라마 게시판의 작품 한 편만 열려 있습니다.
+        작품마다 진도를 따로 관리합니다. 같은 원작이어도 작품이 다르면 진도를 공유하지 않습니다.
       </div>
       {works.map((w) => (
         <div className="card" key={w.id}>

@@ -53,13 +53,47 @@ async function fromTmdb({ type, query, year }) {
   return path ? `https://image.tmdb.org/t/p/w500${path}` : null;
 }
 
+/** JPEG 헤더에서 가로 폭만 읽는다. 표지 후보 중 썸네일을 걸러내는 데 쓴다. */
+function jpegWidth(buf) {
+  let i = 2;
+  while (i + 9 < buf.length) {
+    if (buf[i] !== 0xff) {
+      i++;
+      continue;
+    }
+    const marker = buf[i + 1];
+    if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+      return buf.readUInt16BE(i + 7);
+    }
+    i += 2 + buf.readUInt16BE(i + 2);
+  }
+  return 0;
+}
+
+/** 카드에 쓸 만한 표지의 최소 가로 폭. 이보다 작으면 다음 판본을 본다. */
+const MIN_COVER_WIDTH = 240;
+
+/**
+ * Open Library는 같은 작품이라도 95px짜리 썸네일만 있는 판본이 섞여 있어서
+ * 첫 결과를 그대로 쓰면 카드가 뭉개진다. 후보를 순서대로 열어 보고 쓸 만한
+ * 폭을 가진 첫 표지를 고르며, 전부 작으면 그중 첫 번째라도 돌려준다.
+ */
 async function fromOpenLibrary({ query }) {
-  const params = new URLSearchParams({ q: query, limit: "5", fields: "cover_i,title" });
+  const params = new URLSearchParams({ q: query, limit: "10", fields: "cover_i,title" });
   const res = await fetch(`https://openlibrary.org/search.json?${params}`);
   if (!res.ok) throw new Error(`Open Library ${res.status}`);
   const data = await res.json();
-  const cover = data.docs?.find((d) => d.cover_i)?.cover_i;
-  return cover ? `https://covers.openlibrary.org/b/id/${cover}-L.jpg` : null;
+  const covers = (data.docs ?? []).map((d) => d.cover_i).filter(Boolean);
+  let fallback = null;
+  for (const cover of covers) {
+    const url = `https://covers.openlibrary.org/b/id/${cover}-L.jpg`;
+    const img = await fetch(url);
+    if (!img.ok) continue;
+    const buf = Buffer.from(await img.arrayBuffer());
+    if (jpegWidth(buf) >= MIN_COVER_WIDTH) return url;
+    fallback ??= url;
+  }
+  return fallback;
 }
 
 const works = await db`select id, title from works order by title`;

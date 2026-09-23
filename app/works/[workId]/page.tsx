@@ -9,7 +9,7 @@ import {
 } from "@/lib/data";
 import { getCurrentUser } from "@/lib/session";
 import { setProgressAction } from "@/app/actions";
-import { BOARD_HINTS, BOARD_LABELS, BOARD_TYPES, toBoardType, unitNoun } from "@/lib/boards";
+import { BOARD_HINTS, BOARD_LABELS, BOARD_TYPES, toBoardType } from "@/lib/boards";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +34,6 @@ export default async function WorkRoomPage({
     listVisiblePosts(user.id, workId, boardType, mineOnly),
     countVisibleByBoard(user.id, workId, mineOnly),
   ]);
-  const unit = unitNoun(work.progress_unit);
   const currentLabel =
     stages.find((s) => s.stage_no === progress)?.label ?? "아직 보지 않음";
   const query = (next: { board?: string; mine?: boolean }) => {
@@ -57,7 +56,7 @@ export default async function WorkRoomPage({
           <b>{user.display_name}</b>님은 현재 <b>{currentLabel}</b>까지 봤습니다.
           <br />
           <span className="muted">
-            글에 포함된 마지막 {unit}가 내 진도 이하일 때만 제목과 본문이 공개됩니다.
+            글에 포함된 마지막 지점이 내 진도 이하일 때만 제목과 본문이 공개됩니다.
           </span>
         </p>
         <form action={setProgressAction} className="row">
@@ -73,7 +72,7 @@ export default async function WorkRoomPage({
           <button className="btn primary" type="submit">여기까지 봤어요</button>
         </form>
         <p className="muted" style={{ marginBottom: 0 }}>
-          진도를 낮추면 그 이후 {unit}의 글은 다시 숨겨집니다. 이미 쓴 글은 지워지지 않습니다.
+          진도를 낮추면 그 이후 범위의 글은 다시 숨겨집니다. 이미 쓴 글은 지워지지 않습니다.
         </p>
       </div>
 

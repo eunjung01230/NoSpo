@@ -1,69 +1,41 @@
-import Image from "next/image";
-import styles from "./page.module.css";
+import Link from "next/link";
+import { listWorks } from "@/lib/data";
+import { isDbConfigured } from "@/lib/db";
 
-export default function Home() {
+export const dynamic = "force-dynamic";
+
+export default async function WorkBrowsePage() {
+  if (!isDbConfigured()) {
+    return (
+      <>
+        <h1>NoSpo</h1>
+        <p className="muted">다 본 사람 말고, 나만큼 본 사람들과.</p>
+        <div className="notice error">
+          DATABASE_URL이 아직 설정되지 않았습니다. .env.local에 Neon 연결 문자열을
+          입력하고 <code>npm run db:setup</code>을 실행한 뒤 새로고침하세요.
+        </div>
+      </>
+    );
+  }
+
+  const works = await listWorks();
+
   return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className={styles.intro}>
-          <h1>
-            To get started, edit the{" "}
-            <code className={styles.code}>page.tsx</code> file.
-          </h1>
-          <p>
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <>
+      <h1>작품 탐색</h1>
+      <p className="muted">다 본 사람 말고, 나만큼 본 사람들과.</p>
+      <div className="notice">
+        이번 시연에서는 드라마 게시판의 작품 한 편만 열려 있습니다.
+      </div>
+      {works.map((w) => (
+        <div className="card" key={w.id}>
+          <span className="tag">{w.board}</span>
+          <h2 style={{ margin: "8px 0" }}>
+            <Link href={`/works/${w.id}`}>{w.title}</Link>
+          </h2>
+          <p className="muted">{w.description}</p>
         </div>
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className={styles.secondary}
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+      ))}
+    </>
   );
 }

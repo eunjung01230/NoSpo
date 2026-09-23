@@ -58,6 +58,12 @@ await db`alter table posts add constraint posts_board_type_check
 await db`create index if not exists posts_work_board_stage_idx
   on posts (work_id, board_type, max_stage)`;
 
+// 분야(영화/드라마/애니/만화/책) · 국내외 구분 · 장르는 works를 확장해서 담는다.
+await db`alter table works add column if not exists category text`;
+await db`alter table works add column if not exists origin text`;
+await db`alter table works add column if not exists genre text`;
+await db`create index if not exists works_category_idx on works (category, origin, genre)`;
+
 await db`insert into users (id, display_name) values
   ('user-a', '시연 사용자 A'), ('user-b', '시연 사용자 B')
   on conflict (id) do nothing`;
@@ -66,61 +72,61 @@ await db`insert into users (id, display_name) values
 // 저작권 보호를 위해 작품명·포맷·진도 단위와 한 줄 소개만 저장한다.
 const works = [
   {
-    id: "squid-game-s1", board: "드라마(국내)", title: "오징어 게임 시즌 1",
+    id: "squid-game-s1", category: "drama", origin: "domestic", genre: "스릴러", board: "드라마(국내)", title: "오징어 게임 시즌 1",
     description: "정체불명의 게임에 초대된 참가자들을 다룬 한국 드라마. 시즌 1은 전 9화 구성입니다.",
     unit: "episode", stages: 9, suffix: "화",
     progress: { "user-a": 3, "user-b": 8 },
   },
   {
-    id: "stranger-things-s1", board: "드라마(외국)", title: "기묘한 이야기 시즌 1",
+    id: "stranger-things-s1", category: "drama", origin: "foreign", genre: "SF", board: "드라마(외국)", title: "기묘한 이야기 시즌 1",
     description: "작은 마을에서 벌어지는 사건을 다룬 미국 드라마. 시즌 1은 전 8화 구성입니다.",
     unit: "episode", stages: 8, suffix: "화",
     progress: { "user-a": 2, "user-b": 6 },
   },
   {
-    id: "attack-on-titan-s1", board: "애니", title: "진격의 거인 시즌 1",
+    id: "attack-on-titan-s1", category: "anime", origin: null, genre: "액션", board: "애니", title: "진격의 거인 시즌 1",
     description: "거인과 인류의 대립을 그린 일본 애니메이션. 시즌 1은 전 25화 구성입니다.",
     unit: "episode", stages: 25, suffix: "화",
     progress: { "user-a": 5, "user-b": 18 },
   },
   {
-    id: "one-piece-manga", board: "만화", title: "원피스 (만화책)",
+    id: "one-piece-manga", category: "comic", origin: null, genre: "모험", board: "만화", title: "원피스 (만화책)",
     description: "해적들의 대항해를 그린 일본 만화. 진도는 몇 권까지 읽었는지로 기록합니다.",
     unit: "volume", stages: 110, suffix: "권",
     progress: { "user-a": 12, "user-b": 60 },
   },
   {
-    id: "solo-leveling-webtoon", board: "만화", title: "나 혼자만 레벨업 (웹툰)",
+    id: "solo-leveling-webtoon", category: "comic", origin: null, genre: "액션", board: "만화", title: "나 혼자만 레벨업 (웹툰)",
     description: "헌터들이 등장하는 한국 웹툰. 진도는 몇 화까지 읽었는지로 기록합니다.",
     unit: "episode", stages: 179, suffix: "화",
     progress: { "user-a": 20, "user-b": 95 },
   },
   {
-    id: "harry-potter-novels", board: "책", title: "해리 포터 시리즈 (소설)",
+    id: "harry-potter-novels", category: "book", origin: null, genre: "판타지", board: "책", title: "해리 포터 시리즈 (소설)",
     description: "마법 학교를 배경으로 한 판타지 소설 시리즈. 진도는 몇 권까지 읽었는지로 기록합니다.",
     unit: "volume", stages: 7, suffix: "권",
     progress: { "user-a": 2, "user-b": 5 },
   },
   {
-    id: "mcu-infinity-saga", board: "영화(외국)", title: "마블 시네마틱 유니버스: 인피니티 사가",
+    id: "mcu-infinity-saga", category: "movie", origin: "foreign", genre: "히어로", board: "영화(외국)", title: "마블 시네마틱 유니버스: 인피니티 사가",
     description: "여러 영화가 이어지는 미국 슈퍼히어로 프랜차이즈. 진도는 개봉 순으로 몇 편까지 봤는지 기록합니다.",
     unit: "film", stages: 23, suffix: "편",
     progress: { "user-a": 6, "user-b": 15 },
   },
   {
-    id: "dark-knight-trilogy", board: "영화(외국)", title: "다크 나이트 3부작",
+    id: "dark-knight-trilogy", category: "movie", origin: "foreign", genre: "범죄", board: "영화(외국)", title: "다크 나이트 3부작",
     description: "한 히어로를 다룬 영화 3부작. 진도는 몇 편까지 봤는지로 기록합니다.",
     unit: "film", stages: 3, suffix: "편",
     progress: { "user-a": 1, "user-b": 3 },
   },
   {
-    id: "interstellar", board: "영화(외국)", title: "인터스텔라",
+    id: "interstellar", category: "movie", origin: "foreign", genre: "SF", board: "영화(외국)", title: "인터스텔라",
     description: "우주 탐사를 다룬 단일 영화. 회차가 없으므로 봤는지 여부만 기록합니다.",
     unit: "single", stages: 1, suffix: "", singleLabel: "봤다",
     progress: { "user-a": 0, "user-b": 1 },
   },
   {
-    id: "parasite", board: "영화(국내)", title: "기생충",
+    id: "parasite", category: "movie", origin: "domestic", genre: "스릴러", board: "영화(국내)", title: "기생충",
     description: "두 가족을 둘러싼 이야기를 그린 한국 단일 영화. 봤는지 여부만 기록합니다.",
     unit: "single", stages: 1, suffix: "", singleLabel: "봤다",
     progress: { "user-a": 1, "user-b": 0 },
@@ -141,10 +147,13 @@ for (const oldId of ["frieren-s1", "lotr-trilogy"]) {
 }
 
 for (const w of works) {
-  await db`insert into works (id, board, title, description, progress_unit)
-    values (${w.id}, ${w.board}, ${w.title}, ${w.description}, ${w.unit})
+  await db`insert into works (id, board, title, description, progress_unit,
+                             category, origin, genre)
+    values (${w.id}, ${w.board}, ${w.title}, ${w.description}, ${w.unit},
+            ${w.category}, ${w.origin}, ${w.genre})
     on conflict (id) do update set board = excluded.board, title = excluded.title,
-      description = excluded.description, progress_unit = excluded.progress_unit`;
+      description = excluded.description, progress_unit = excluded.progress_unit,
+      category = excluded.category, origin = excluded.origin, genre = excluded.genre`;
   if (w.singleLabel) {
     await db`insert into work_stages (work_id, stage_no, label)
       values (${w.id}, 1, ${w.singleLabel})

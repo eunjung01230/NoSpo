@@ -43,6 +43,22 @@ Vercel 프로젝트 `nospo`에 Neon 통합으로 `DATABASE_URL` 등이 Preview/P
 등록되어 있다. Secret이라 `vercel env pull`로는 값을 내려받을 수 없으므로, 로컬은 Neon
 콘솔의 연결 문자열을 `.env.local`에 직접 입력한다. 연결 확인은 `npm run db:check`.
 
+## 카테고리
+작품은 분야(works.category: movie/drama/anime/comic/book), 국내외(works.origin:
+domestic/foreign, 영화·드라마만), 장르(works.genre)로 분류한다. 탐색은 왼쪽 CATEGORIES 사이드바(app/CategorySidebar.tsx)로 하며, 현재 분야 아래에
+국내·외국과 장르가 펼쳐진다. 경로는
+/categories/[category] → (영화·드라마는 [origin] →) [genre] 순이며, 슬러그 매핑과
+분야 목록은 lib/categories.ts 한 곳에만 둔다. 분류는 작품 메타일 뿐이고 글 공개 판정에는
+관여하지 않는다.
+
+## 디자인
+밤의 서재 톤(웜 다크 + 종이). 토큰은 app/globals.css의 --ns-* 한 곳에서만 정의한다:
+어두운 층(배경 #27221F → 섹션 #342D29 → 패널 #3A322D)은 탐색·진도, 밝은 종이 층
+(#E7DED2 / 작성 #EEE7DC / 입력 #FBF8F3)은 읽고 쓰는 영역이다. 와인색 #7A4E4E와
+말린 장미 #C08A7E는 회차·진도·주요 행동에만 쓴다. 서체는 제목·진도 Gowun Batang,
+본문 Pretendard, 숫자·라벨 IBM Plex Mono. 반경은 2·4와 세그먼트 pill만, 그림자는 쓰지 않는다.
+게시판은 같은 종이 시트 안에서 목록 형식이 달라진다(감상 행 / 질문 Q. / 해석 넓은 행 / 후기 카드).
+
 ## 이번 범위 밖
 댓글, 좋아요, 검색, 사용자 작품 등록, AI 판별, 추천, 알림, 관리자 화면, 잠금 카드 UI.
 미정: 서비스명·최종 디자인, 잠금 카드 표시 방식.

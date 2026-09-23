@@ -5,7 +5,7 @@ import type { Stage, VisiblePost, Work } from "./types";
 export async function listWorks(): Promise<Work[]> {
   const db = sql();
   return (await db`
-    select id, board, title, description, progress_unit
+    select id, board, title, description, progress_unit, category, origin, genre
     from works
     order by title
   `) as Work[];
@@ -14,7 +14,7 @@ export async function listWorks(): Promise<Work[]> {
 export async function getWork(workId: string): Promise<Work | null> {
   const db = sql();
   const rows = (await db`
-    select id, board, title, description, progress_unit
+    select id, board, title, description, progress_unit, category, origin, genre
     from works where id = ${workId}
   `) as Work[];
   return rows[0] ?? null;
@@ -173,4 +173,73 @@ export async function deleteOwnPost(
     returning id
   `) as { id: string }[];
   return rows.length > 0;
+}
+
+export type WorkCard = Work & {
+  total_stages: number;
+  progress: number;
+  progress_label: string | null;
+};
+
+/**
+ * 작품 탐색 카드용 조회. 작품 메타와 내 진도만 읽으며 글은 건드리지 않는다.
+ * (공개 판정과 무관한 표시용 데이터)
+ */
+export async function listWorkCards(
+  userId: string,
+  filter: { category?: string; origin?: string; genre?: string } = {}
+): Promise<WorkCard[]> {
+  const db = sql();
+  const { category = null, origin = null, genre = null } = filter;
+  return (await db`
+    select w.id, w.board, w.title, w.description, w.progress_unit,
+           w.category, w.origin, w.genre,
+           (select count(*)::int from work_stages s where s.work_id = w.id) as total_stages,
+           coalesce(up.stage_no, 0) as progress,
+           (select s.label from work_stages s
+             where s.work_id = w.id and s.stage_no = coalesce(up.stage_no, 0)) as progress_label
+    from works w
+      left join user_progress up on up.work_id = w.id and up.user_id = ${userId}
+    where (${category}::text is null or w.category = ${category})
+      and (${origin}::text is null or w.origin = ${origin})
+      and (${genre}::text is null or w.genre = ${genre})
+    order by w.board, w.title
+  `) as WorkCard[];
+}
+
+/** 분야별 작품 수. 카테고리 화면의 인덱스에 쓴다. */
+export async function countWorksByCategory(): Promise<Record<string, number>> {
+  const db = sql();
+  const rows = (await db`
+    select category, count(*)::int as c from works
+    where category is not null group by category
+  `) as { category: string; c: number }[];
+  return Object.fromEntries(rows.map((r) => [r.category, r.c]));
+}
+
+/** 분야(+국내외) 아래의 장르 목록과 작품 수. */
+export async function listGenres(
+  category: string,
+  origin?: string | null
+): Promise<{ genre: string; c: number }[]> {
+  const db = sql();
+  const o = origin ?? null;
+  return (await db`
+    select genre, count(*)::int as c from works
+    where category = ${category}
+      and (${o}::text is null or origin = ${o})
+      and genre is not null
+    group by genre order by genre
+  `) as { genre: string; c: number }[];
+}
+
+/** 분야 아래 국내/외국별 작품 수. */
+export async function countByOrigin(category: string): Promise<Record<string, number>> {
+  const db = sql();
+  const rows = (await db`
+    select origin, count(*)::int as c from works
+    where category = ${category} and origin is not null
+    group by origin
+  `) as { origin: string; c: number }[];
+  return Object.fromEntries(rows.map((r) => [r.origin, r.c]));
 }

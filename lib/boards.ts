@@ -32,6 +32,53 @@ export const BOARD_DESCRIPTIONS: Record<BoardType, string> = {
   recap: "현재까지 본 구간에 대한 정리와 평가를 남깁니다.",
 };
 
+
+/** 게시판 정체성 — 번호·영문 캡션·CTA·입력 안내. 표시 전용 값이다. */
+export const BOARD_NUMERALS: Record<BoardType, string> = {
+  review: 'I', question: 'II', interpretation: 'III', recap: 'IV',
+};
+
+export const BOARD_EN: Record<BoardType, string> = {
+  review: 'NOTES', question: 'QUESTIONS', interpretation: 'READINGS', recap: 'RETROSPECTIVES',
+};
+
+export const BOARD_CTA: Record<BoardType, string> = {
+  review: '감상 쓰기', question: '질문 남기기', interpretation: '해석 쓰기', recap: '후기 쓰기',
+};
+
+export const BOARD_PLACEHOLDERS: Record<BoardType, { title: string; body: string }> = {
+  review: {
+    title: '이 기록에 붙일 제목',
+    body: '본 만큼의 느낌을 자유롭게 적어주세요. 한 줄 메모도 좋아요.',
+  },
+  question: {
+    title: '궁금한 점을 한 문장으로',
+    body: '어떤 장면에서 무엇이 궁금했는지 적어주세요. 아직 보지 않은 회차에 대한 추측은 빼주세요.',
+  },
+  interpretation: {
+    title: '어떤 장면을 어떻게 읽었나요',
+    body: '장면과 근거를 함께 적어주세요. 선택한 회차까지의 단서만으로요.',
+  },
+  recap: {
+    title: '이 구간을 한 줄로 정리한다면',
+    body: '처음부터 선택한 회차까지를 돌아보며 정리해주세요.',
+  },
+};
+
+/** 글에 붙는 회차 표기. 게시판마다 말투가 다르다. */
+export function stageTag(board: BoardType, stageLabel: string) {
+  switch (board) {
+    case "question":
+      return `${stageLabel}까지 보고 묻는 질문`;
+    case "interpretation":
+      return `${stageLabel}까지 읽은 해석`;
+    case "recap":
+      return `처음부터 ${stageLabel}까지 정리`;
+    default:
+      return `${stageLabel}까지의 내용`;
+  }
+}
+
 export function isBoardType(v: unknown): v is BoardType {
   return typeof v === "string" && (BOARD_TYPES as readonly string[]).includes(v);
 }

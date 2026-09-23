@@ -12,10 +12,15 @@ export default function Recommendations({
   works,
   userLabel,
   hasPosts,
+  heading,
+  note,
 }: {
   works: Recommendation[];
   userLabel: string;
   hasPosts: boolean;
+  /** 작품을 다 본 자리처럼 다른 맥락에서 쓸 때 제목과 설명을 갈아끼운다. */
+  heading?: string;
+  note?: string;
 }) {
   if (works.length === 0) return null;
 
@@ -25,12 +30,13 @@ export default function Recommendations({
         <div className="stack" style={{ gap: 6 }}>
           <span className="eyebrow">다음에 볼 것</span>
           <h2 className="section-title">
-            {hasPosts ? "내 기록에서 이어지는 추천" : "시간이 적게 드는 것부터"}
+            {heading ?? (hasPosts ? "내 기록에서 이어지는 추천" : "시간이 적게 드는 것부터")}
           </h2>
           <span className="muted">
-            {hasPosts
+            {note ??
+              (hasPosts
               ? `${userLabel}님이 글을 남긴 작품의 분야·장르를 기준으로, 아직 다 보지 않은 작품을 남은 시간이 적은 순으로 골랐습니다.`
-              : "아직 남긴 글이 없어 남은 시간이 적은 작품부터 보여드립니다. 글을 남기면 그 분야·장르를 따라 추천이 바뀝니다."}
+              : "아직 남긴 글이 없어 남은 시간이 적은 작품부터 보여드립니다. 글을 남기면 그 분야·장르를 따라 추천이 바뀝니다.")}
           </span>
         </div>
 

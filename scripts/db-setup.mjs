@@ -75,6 +75,12 @@ await db`create table if not exists comments (
 )`;
 await db`create index if not exists comments_post_idx on comments (post_id, created_at)`;
 
+// 대댓글은 한 단계만 둔다(답글에 또 답글을 달지 않는다).
+// 부모 댓글이 지워지면 그 아래 답글도 함께 사라진다.
+await db`alter table comments add column if not exists parent_id uuid
+  references comments(id) on delete cascade`;
+await db`create index if not exists comments_parent_idx on comments (parent_id)`;
+
 // 분야(영화/드라마/애니/만화/책) · 국내외 구분 · 장르는 works를 확장해서 담는다.
 await db`alter table works add column if not exists category text`;
 await db`alter table works add column if not exists origin text`;
@@ -86,9 +92,50 @@ await db`alter table works add column if not exists creator text`;
 await db`alter table works add column if not exists minutes_per_stage int`;
 await db`create index if not exists works_category_idx on works (category, origin, genre)`;
 
+// 신고·경고·관리자. 공개 판정(max_stage <= 진도)은 그대로 두고 그 위에 얹는 안전장치다.
+// 관리자 여부는 users에 한 컬럼으로 두고, 시연 관리자 계정을 하나 등록한다.
+await db`alter table users add column if not exists is_admin boolean not null default false`;
+
+// 글의 상태: 신고 누적으로 가려졌는지, AI 사전 검토 결과가 무엇이었는지.
+// hidden_at이 채워진 글은 조회 단계에서 제외한다(관리자 화면에서만 본다).
+await db`alter table posts add column if not exists hidden_at timestamptz`;
+await db`alter table posts add column if not exists hidden_reason text`;
+await db`alter table posts add column if not exists ai_verdict text`;
+await db`alter table posts add column if not exists ai_reason text`;
+await db`alter table posts add column if not exists ai_checked_at timestamptz`;
+// 작성자가 AI 경고를 보고도 그대로 등록했는지. 관리자 화면의 '검토 필요' 목록 기준이다.
+await db`alter table posts add column if not exists ai_acknowledged boolean not null default false`;
+await db`create index if not exists posts_hidden_idx on posts (hidden_at)`;
+
+// 신고. 한 사람이 같은 글을 여러 번 신고해도 1건으로 센다(unique).
+await db`create table if not exists post_reports (
+  id uuid primary key default gen_random_uuid(),
+  post_id uuid not null references posts(id) on delete cascade,
+  reporter_id text not null references users(id) on delete cascade,
+  reason text not null,
+  detail text,
+  created_at timestamptz not null default now(),
+  unique (post_id, reporter_id)
+)`;
+
+// 경고 누적. 신고 누적으로 글이 가려지면 작성자에게 1건 쌓이고,
+// 관리자가 숨김을 풀면 그 글로 생긴 경고도 함께 지운다.
+await db`create table if not exists user_warnings (
+  id uuid primary key default gen_random_uuid(),
+  user_id text not null references users(id) on delete cascade,
+  post_id uuid references posts(id) on delete set null,
+  source text not null,
+  note text,
+  created_at timestamptz not null default now()
+)`;
+await db`create index if not exists user_warnings_user_idx on user_warnings (user_id)`;
+
 await db`insert into users (id, display_name) values
   ('user-a', '시연 사용자 A'), ('user-b', '시연 사용자 B')
   on conflict (id) do nothing`;
+await db`insert into users (id, display_name, is_admin) values
+  ('user-admin', '시연 관리자', true)
+  on conflict (id) do update set is_admin = true`;
 
 // 작품은 운영 측에서 미리 등록한다. 장르·포맷마다 진도 단위가 다르므로 억지로 통일하지 않는다.
 // 저작권 보호를 위해 작품명·포맷·진도 단위와 한 줄 소개만 저장한다.
@@ -188,7 +235,9 @@ for (const w of works) {
       description = excluded.description, progress_unit = excluded.progress_unit,
       category = excluded.category, origin = excluded.origin, genre = excluded.genre,
       year = excluded.year, creator = excluded.creator,
-      minutes_per_stage = excluded.minutes_per_stage,
+      -- 감상 시간도 별도 스크립트(npm run runtimes)로 채우므로 이미 있는 값은 두고,
+      -- 아직 비어 있을 때만 시연용 기본값을 넣는다.
+      minutes_per_stage = coalesce(works.minutes_per_stage, excluded.minutes_per_stage),
       -- 포스터는 별도 스크립트(npm run posters)로 채우므로 기존 값을 지우지 않는다.
       poster_url = coalesce(excluded.poster_url, works.poster_url)`;
   if (w.singleLabel) {
@@ -208,6 +257,13 @@ for (const w of works) {
       on conflict (user_id, work_id) do nothing`;
   }
 }
+
+// 관리자는 신고된 글을 직접 읽어야 하므로 모든 작품을 끝까지 본 상태로 시작한다.
+// (이미 값이 있으면 건드리지 않는다.)
+await db`insert into user_progress (user_id, work_id, stage_no)
+  select 'user-admin', w.id, (select count(*)::int from work_stages s where s.work_id = w.id)
+  from works w
+  on conflict (user_id, work_id) do nothing`;
 
 // 시연 글. 실제 줄거리·대사·전개를 적지 않은 짧은 더미 감상문이다.
 const seeds = [
@@ -377,11 +433,26 @@ const commentSeeds = [
    "공간의 높낮이 이야기 잘 봤습니다. 다시 볼 때 그 부분을 눈여겨보려고요."],
   ["c0000000-0000-4000-8000-000000000004", "f0000000-0000-4000-8000-000000000001", "user-b",
    "저는 두 화씩 끊어 봅니다. 자유 게시판이라 진도 상관없이 이야기할 수 있어 좋네요."],
+  ["c0000000-0000-4000-8000-000000000005", "11111111-1111-4111-8111-000000000102", "user-b",
+   "저도 2화까지만 봤습니다. 같은 지점에서 궁금했던 걸 적어둘게요."],
+];
+
+// 답글(대댓글) 시연 데이터. parent_id로 위 댓글에 매단다.
+const replySeeds = [
+  ["c0000000-0000-4000-8000-000000000101", "11111111-1111-4111-8111-000000000003",
+   "c0000000-0000-4000-8000-000000000001", "user-a",
+   "읽어주셔서 고맙습니다. 같은 구간에서 비슷하게 느끼셨군요."],
 ];
 
 for (const [id, postId, author, body] of commentSeeds) {
   await db`insert into comments (id, post_id, author_id, body, is_demo_seed)
     values (${id}, ${postId}, ${author}, ${body}, true)
+    on conflict (id) do nothing`;
+}
+
+for (const [id, postId, parentId, author, body] of replySeeds) {
+  await db`insert into comments (id, post_id, parent_id, author_id, body, is_demo_seed)
+    values (${id}, ${postId}, ${parentId}, ${author}, ${body}, true)
     on conflict (id) do nothing`;
 }
 

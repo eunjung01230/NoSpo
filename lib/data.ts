@@ -74,6 +74,7 @@ export async function listVisiblePosts(
     where p.work_id = ${workId}
       and p.board_type = ${boardType}
       and p.max_stage <= ${progress}
+      and p.hidden_at is null
       and (${mineOnly} = false or p.author_id = ${userId})
     order by p.max_stage, p.created_at
   `) as VisiblePost[];
@@ -92,6 +93,7 @@ export async function countVisibleByBoard(
     from posts
     where work_id = ${workId}
       and max_stage <= ${progress}
+      and hidden_at is null
       and (${mineOnly} = false or author_id = ${userId})
     group by board_type
   `) as { board_type: string; c: number }[];
@@ -115,6 +117,7 @@ export async function getVisiblePost(
       join users u on u.id = p.author_id
       left join work_stages s on s.work_id = p.work_id and s.stage_no = p.max_stage
     where p.id = ${postId} and p.work_id = ${workId} and p.max_stage <= ${progress}
+      and p.hidden_at is null
   `) as VisiblePost[];
   return rows[0] ?? null;
 }
@@ -129,6 +132,10 @@ export async function getOwnPost(
   return post && post.author_id === userId ? post : null;
 }
 
+/**
+ * 글 등록. AI 사전 검토 결과도 같이 남긴다. 경고를 보고도 그대로 올린 글
+ * (ai_acknowledged)은 관리자 화면의 '검토 필요' 목록에 쌓인다.
+ */
 export async function createPost(input: {
   workId: string;
   boardType: BoardType;
@@ -136,13 +143,21 @@ export async function createPost(input: {
   title: string;
   body: string;
   maxStage: number;
-}) {
+  aiVerdict?: string | null;
+  aiReason?: string | null;
+  aiAcknowledged?: boolean;
+}): Promise<string> {
   const db = sql();
-  await db`
-    insert into posts (work_id, board_type, author_id, title, body, max_stage, is_demo_seed)
+  const rows = (await db`
+    insert into posts (work_id, board_type, author_id, title, body, max_stage, is_demo_seed,
+                       ai_verdict, ai_reason, ai_checked_at, ai_acknowledged)
     values (${input.workId}, ${input.boardType}, ${input.authorId}, ${input.title},
-            ${input.body}, ${input.maxStage}, false)
-  `;
+            ${input.body}, ${input.maxStage}, false,
+            ${input.aiVerdict ?? null}, ${input.aiReason ?? null}, now(),
+            ${input.aiAcknowledged ?? false})
+    returning id
+  `) as { id: string }[];
+  return rows[0].id;
 }
 
 /** 소유권은 SQL 조건으로 강제한다. 수정된 행이 없으면 권한이 없는 것이다. */
@@ -153,13 +168,20 @@ export async function updateOwnPost(input: {
   title: string;
   body: string;
   maxStage: number;
+  aiVerdict?: string | null;
+  aiReason?: string | null;
+  aiAcknowledged?: boolean;
 }): Promise<boolean> {
   const db = sql();
   const rows = (await db`
     update posts set title = ${input.title}, body = ${input.body},
-                     max_stage = ${input.maxStage}
+                     max_stage = ${input.maxStage},
+                     ai_verdict = ${input.aiVerdict ?? null},
+                     ai_reason = ${input.aiReason ?? null},
+                     ai_checked_at = now(),
+                     ai_acknowledged = ${input.aiAcknowledged ?? false}
     where id = ${input.postId} and work_id = ${input.workId}
-      and author_id = ${input.authorId}
+      and author_id = ${input.authorId} and hidden_at is null
     returning id
   `) as { id: string }[];
   return rows.length > 0;
@@ -262,7 +284,7 @@ export async function countLockedByBoard(
   const rows = (await db`
     select board_type, count(*)::int as c
     from posts
-    where work_id = ${workId} and max_stage > ${progress}
+    where work_id = ${workId} and max_stage > ${progress} and hidden_at is null
     group by board_type
   `) as { board_type: string; c: number }[];
   return Object.fromEntries(rows.map((r) => [r.board_type, r.c]));
@@ -280,6 +302,7 @@ export async function countPostsBetween(
   const rows = (await db`
     select count(*)::int as c from posts
     where work_id = ${workId} and max_stage > ${lo} and max_stage <= ${hi}
+      and hidden_at is null
   `) as { c: number }[];
   return rows[0]?.c ?? 0;
 }
@@ -297,8 +320,8 @@ export async function listComments(
   if (!post) return null;
   const db = sql();
   return (await db`
-    select c.id, c.post_id, c.author_id, u.display_name as author_name, c.body,
-           c.is_demo_seed,
+    select c.id, c.post_id, c.parent_id, c.author_id, u.display_name as author_name,
+           c.body, c.is_demo_seed,
            to_char(c.created_at, 'YYYY-MM-DD HH24:MI') as created_at
     from comments c
       join users u on u.id = c.author_id
@@ -311,12 +334,26 @@ export async function createComment(input: {
   postId: string;
   authorId: string;
   body: string;
+  parentId?: string | null;
 }) {
   const db = sql();
   await db`
-    insert into comments (post_id, author_id, body, is_demo_seed)
-    values (${input.postId}, ${input.authorId}, ${input.body}, false)
+    insert into comments (post_id, parent_id, author_id, body, is_demo_seed)
+    values (${input.postId}, ${input.parentId ?? null}, ${input.authorId}, ${input.body}, false)
   `;
+}
+
+/**
+ * 답글을 달 수 있는 댓글인지 확인한다. 같은 글에 달린 댓글이어야 하고,
+ * 그 자신이 답글이면 안 된다(답글의 답글은 만들지 않는다).
+ */
+export async function canReplyTo(parentId: string, postId: string): Promise<boolean> {
+  const db = sql();
+  const rows = (await db`
+    select id from comments
+    where id = ${parentId} and post_id = ${postId} and parent_id is null
+  `) as { id: string }[];
+  return rows.length > 0;
 }
 
 /** 댓글 삭제도 소유권을 SQL 조건으로 강제한다. 0행이면 권한 없음이다. */
@@ -406,4 +443,238 @@ export async function countMyPosts(userId: string): Promise<number> {
     select count(*)::int as c from posts where author_id = ${userId}
   `) as { c: number }[];
   return rows[0]?.c ?? 0;
+}
+
+/* ── 신고 · 경고 · 관리자 ───────────────────────────────────────────────
+   공개 판정(max_stage <= 진도)은 그대로 두고 그 위에 얹는 안전장치다.
+   숨긴 글은 위의 조회 함수들이 모두 hidden_at is null로 걸러내므로, 여기서만 읽는다. */
+
+/** 이 사람이 이 글을 이미 신고했는가. 같은 글은 한 사람당 1건만 센다. */
+export async function hasReported(postId: string, reporterId: string): Promise<boolean> {
+  const db = sql();
+  const rows = (await db`
+    select 1 from post_reports where post_id = ${postId} and reporter_id = ${reporterId}
+  `) as unknown[];
+  return rows.length > 0;
+}
+
+/**
+ * 신고 접수. 신고가 기준치만큼 쌓이면 그 자리에서 글을 가리고 작성자에게 경고를 1건 남긴다.
+ * 관리자가 숨김을 풀면 그 글로 생긴 경고도 함께 사라진다(unhidePost).
+ */
+export async function reportPost(input: {
+  postId: string;
+  reporterId: string;
+  reason: string;
+  detail: string | null;
+  threshold: number;
+}): Promise<{ count: number; hidden: boolean }> {
+  const db = sql();
+  await db`
+    insert into post_reports (post_id, reporter_id, reason, detail)
+    values (${input.postId}, ${input.reporterId}, ${input.reason}, ${input.detail})
+    on conflict (post_id, reporter_id) do update
+      set reason = excluded.reason, detail = excluded.detail
+  `;
+  const counted = (await db`
+    select count(*)::int as c from post_reports where post_id = ${input.postId}
+  `) as { c: number }[];
+  const count = counted[0]?.c ?? 0;
+  if (count < input.threshold) return { count, hidden: false };
+
+  // 이미 가려진 글이면 경고를 두 번 세지 않는다(0행이면 아무 일도 하지 않는다).
+  const hidden = (await db`
+    update posts set hidden_at = now(), hidden_reason = 'reports'
+    where id = ${input.postId} and hidden_at is null
+    returning author_id
+  `) as { author_id: string }[];
+  if (hidden.length > 0) {
+    await db`
+      insert into user_warnings (user_id, post_id, source, note)
+      values (${hidden[0].author_id}, ${input.postId}, 'reports',
+              ${`신고 ${count}건으로 글이 가려졌습니다.`})
+    `;
+  }
+  return { count, hidden: true };
+}
+
+/** 누적 경고 수. 글쓰기 정지 판단은 항상 이 값으로 서버에서 한다. */
+export async function countWarnings(userId: string): Promise<number> {
+  const db = sql();
+  const rows = (await db`
+    select count(*)::int as c from user_warnings where user_id = ${userId}
+  `) as { c: number }[];
+  return rows[0]?.c ?? 0;
+}
+
+/** 작성자 본인에게만, 자기 글이 가려졌다는 사실을 알려주기 위한 조회(내용은 주지 않는다). */
+export async function getHiddenOwnPost(
+  userId: string,
+  workId: string,
+  postId: string
+): Promise<{ hidden_reason: string | null; report_count: number } | null> {
+  const db = sql();
+  const rows = (await db`
+    select p.hidden_reason,
+           (select count(*)::int from post_reports r where r.post_id = p.id) as report_count
+    from posts p
+    where p.id = ${postId} and p.work_id = ${workId}
+      and p.author_id = ${userId} and p.hidden_at is not null
+  `) as { hidden_reason: string | null; report_count: number }[];
+  return rows[0] ?? null;
+}
+
+export type ModerationPost = {
+  id: string;
+  work_id: string;
+  work_title: string;
+  board_type: BoardType;
+  author_id: string;
+  author_name: string;
+  title: string;
+  max_stage: number;
+  stage_label: string | null;
+  hidden_at: string | null;
+  hidden_reason: string | null;
+  ai_verdict: string | null;
+  ai_reason: string | null;
+  ai_acknowledged: boolean;
+  report_count: number;
+  reasons: string | null;
+  created_at: string;
+};
+
+const MODERATION_COLUMNS = `
+  p.id, p.work_id, w.title as work_title, p.board_type, p.author_id,
+  u.display_name as author_name, p.title, p.max_stage, s.label as stage_label,
+  to_char(p.hidden_at, 'YYYY-MM-DD HH24:MI') as hidden_at, p.hidden_reason,
+  p.ai_verdict, p.ai_reason, p.ai_acknowledged,
+  (select count(*)::int from post_reports r where r.post_id = p.id) as report_count,
+  (select string_agg(distinct r.reason, ',') from post_reports r where r.post_id = p.id) as reasons,
+  to_char(p.created_at, 'YYYY-MM-DD HH24:MI') as created_at
+`;
+
+/** 신고가 한 건이라도 있는 글. 가려진 글이 먼저 온다. */
+export async function listReportedPosts(): Promise<ModerationPost[]> {
+  const db = sql();
+  return (await db`
+    select ${db.unsafe(MODERATION_COLUMNS)}
+    from posts p
+      join works w on w.id = p.work_id
+      join users u on u.id = p.author_id
+      left join work_stages s on s.work_id = p.work_id and s.stage_no = p.max_stage
+    where exists (select 1 from post_reports r where r.post_id = p.id)
+    order by (p.hidden_at is not null) desc, report_count desc, p.created_at desc
+  `) as ModerationPost[];
+}
+
+/**
+ * AI가 경고했는데 작성자가 그대로 올린 글. 등록을 막지 않는 대신 여기에 쌓아 두고
+ * 관리자가 직접 읽어 본다. 검토가 끝나면 ai_verdict를 'reviewed'로 바꾼다.
+ */
+export async function listAiFlaggedPosts(): Promise<ModerationPost[]> {
+  const db = sql();
+  return (await db`
+    select ${db.unsafe(MODERATION_COLUMNS)}
+    from posts p
+      join works w on w.id = p.work_id
+      join users u on u.id = p.author_id
+      left join work_stages s on s.work_id = p.work_id and s.stage_no = p.max_stage
+    where p.ai_verdict = 'warn'
+    order by p.created_at desc
+  `) as ModerationPost[];
+}
+
+export type WarnedUser = {
+  id: string;
+  display_name: string;
+  warnings: number;
+  reports_made: number;
+};
+
+/** 사용자별 경고·신고 현황. 관리자 화면의 마지막 표다. */
+export async function listUserStanding(): Promise<WarnedUser[]> {
+  const db = sql();
+  return (await db`
+    select u.id, u.display_name,
+           (select count(*)::int from user_warnings w where w.user_id = u.id) as warnings,
+           (select count(*)::int from post_reports r where r.reporter_id = u.id) as reports_made
+    from users u
+    where u.is_admin = false
+    order by warnings desc, u.display_name
+  `) as WarnedUser[];
+}
+
+/** 숨김 해제. 그 글 때문에 생긴 경고도 함께 지운다(잘못 가려진 글이었다는 뜻이므로). */
+export async function unhidePost(postId: string): Promise<boolean> {
+  const db = sql();
+  const rows = (await db`
+    update posts set hidden_at = null, hidden_reason = null
+    where id = ${postId} and hidden_at is not null
+    returning id
+  `) as { id: string }[];
+  if (rows.length === 0) return false;
+  await db`delete from user_warnings where post_id = ${postId}`;
+  return true;
+}
+
+/** 관리자가 직접 가리기. 작성자에게 경고가 1건 쌓인다. */
+export async function hidePostByAdmin(postId: string, note: string): Promise<boolean> {
+  const db = sql();
+  const rows = (await db`
+    update posts set hidden_at = now(), hidden_reason = 'admin'
+    where id = ${postId} and hidden_at is null
+    returning author_id
+  `) as { author_id: string }[];
+  if (rows.length === 0) return false;
+  await db`
+    insert into user_warnings (user_id, post_id, source, note)
+    values (${rows[0].author_id}, ${postId}, 'admin', ${note})
+  `;
+  return true;
+}
+
+/** AI 경고를 관리자가 읽고 넘긴 표시. 글은 그대로 두고 목록에서만 내린다. */
+export async function resolveAiFlag(postId: string): Promise<boolean> {
+  const db = sql();
+  const rows = (await db`
+    update posts set ai_verdict = 'reviewed' where id = ${postId} and ai_verdict = 'warn'
+    returning id
+  `) as { id: string }[];
+  return rows.length > 0;
+}
+
+/** 경고 1건 취소. 관리자가 과했다고 판단했을 때 쓴다. */
+export async function revokeLatestWarning(userId: string): Promise<boolean> {
+  const db = sql();
+  const rows = (await db`
+    delete from user_warnings
+    where id = (select id from user_warnings where user_id = ${userId}
+                order by created_at desc limit 1)
+    returning id
+  `) as { id: string }[];
+  return rows.length > 0;
+}
+
+/**
+ * 관리자 열람. 신고를 판단하려면 글을 직접 읽어야 하므로, 관리자에게만 진도 조건과
+ * 숨김 조건을 빼고 글을 내려보낸다. 호출하는 쪽에서 requireAdmin()으로 막는다.
+ */
+export async function getPostAsAdmin(
+  workId: string,
+  postId: string
+): Promise<(VisiblePost & { hidden_at: string | null }) | null> {
+  const db = sql();
+  const rows = (await db`
+    select p.id, p.work_id, p.board_type, p.author_id, u.display_name as author_name,
+           p.title, p.body, p.max_stage, s.label as stage_label, p.is_demo_seed,
+           to_char(p.hidden_at, 'YYYY-MM-DD HH24:MI') as hidden_at,
+           (select count(*)::int from comments c where c.post_id = p.id) as comment_count,
+           to_char(p.created_at, 'YYYY-MM-DD HH24:MI') as created_at
+    from posts p
+      join users u on u.id = p.author_id
+      left join work_stages s on s.work_id = p.work_id and s.stage_no = p.max_stage
+    where p.id = ${postId} and p.work_id = ${workId}
+  `) as (VisiblePost & { hidden_at: string | null })[];
+  return rows[0] ?? null;
 }

@@ -2,14 +2,17 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import {
   countLockedByBoard,
+  countMyPosts,
   countPostsBetween,
   countVisibleByBoard,
   getProgress,
   getWork,
   listStages,
+  recommendWorks,
 } from "@/lib/data";
 import { getCurrentUser } from "@/lib/session";
 import { boardPath, isBoardType } from "@/lib/boards";
+import Recommendations from "@/app/Recommendations";
 import BoardNav from "./BoardNav";
 import ProgressPanel from "./ProgressPanel";
 import TimePanel from "./TimePanel";
@@ -39,6 +42,12 @@ export default async function WorkRoomPage({
     countVisibleByBoard(user.id, workId),
     countLockedByBoard(user.id, workId),
   ]);
+
+  // 이 작품을 끝까지 본 사람에게만 다음에 볼 것을 권한다(다 본 순간이 고르기 좋은 자리다).
+  const finished = stages.length > 0 && progress >= stages.length;
+  const [recommended, myPosts] = finished
+    ? await Promise.all([recommendWorks(user.id), countMyPosts(user.id)])
+    : [[], 0];
 
   // 진도를 바꾼 직후에만 무엇이 달라졌는지 알려준다(개수만, 글 내용은 쓰지 않는다).
   const previous = from !== undefined ? Number(from) : null;
@@ -94,6 +103,16 @@ export default async function WorkRoomPage({
           <BoardNav workId={work.id} counts={counts} />
         </div>
       </section>
+
+      {finished && (
+        <Recommendations
+          works={recommended}
+          userLabel={user.display_name}
+          hasPosts={myPosts > 0}
+          heading={`${work.title}, 여기까지 다 보셨네요`}
+          note="이 작품은 끝까지 봤습니다. 아직 남은 작품 중에서 내가 글을 남긴 분야·장르와 가깝고 시간이 적게 드는 것부터 골랐습니다."
+        />
+      )}
     </>
   );
 }

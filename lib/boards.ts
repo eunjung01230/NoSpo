@@ -31,14 +31,30 @@ export function isUngated(board: BoardType) {
   return UNGATED_BOARDS.includes(board);
 }
 
-/** 댓글을 받는 게시판. 질문 게시판은 이번에도 답글 없이 글로만 잇는다. */
+/** 댓글은 모든 게시판에서 받는다. 답글은 한 단계까지만 달린다. */
 export const BOARD_COMMENTS: Record<BoardType, boolean> = {
   review: true,
-  question: false,
+  question: true,
   interpretation: true,
   recap: true,
   free: true,
 };
+
+/**
+ * 게시판마다 댓글을 부르는 말이 다르다. 질문 게시판에서는 댓글이 곧 답변이라
+ * "답글"이라고 부른다. 댓글에 달리는 한 단계 아래 글은 어디서나 "답글"이다.
+ */
+export const COMMENT_NOUN: Record<BoardType, string> = {
+  review: "댓글",
+  question: "답글",
+  interpretation: "댓글",
+  recap: "댓글",
+  free: "댓글",
+};
+
+export function commentNoun(board: BoardType) {
+  return COMMENT_NOUN[board];
+}
 
 /** 게시판 목록 화면에 쓰는 고유 제목과 설명. */
 export const BOARD_TITLES: Record<BoardType, string> = {

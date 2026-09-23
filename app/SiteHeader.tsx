@@ -37,13 +37,19 @@ export default async function SiteHeader() {
       <div className="container inner">
         {wordmark}
         <div className="user-switch">
+          {/* 관리자로 전환했을 때만 보이는 입구. 권한은 화면에서 다시 확인한다. */}
+          {current.is_admin && (
+            <Link href="/admin" className="muted" style={{ fontSize: 12.5 }}>
+              관리자 화면
+            </Link>
+          )}
           <span className="label">시연 사용자</span>
           <div className="seg" role="group" aria-label="시연 사용자 전환">
             {users.map((u) => (
               <form key={u.id} action={switchUserAction}>
                 <input type="hidden" name="userId" value={u.id} />
                 <button type="submit" aria-pressed={u.id === current.id}>
-                  {u.display_name.replace("시연 사용자 ", "")}
+                  {u.display_name.replace(/^시연 (사용자 )?/, "")}
                 </button>
               </form>
             ))}

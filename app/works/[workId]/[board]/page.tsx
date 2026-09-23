@@ -16,6 +16,7 @@ import {
   BOARD_NUMERALS,
   BOARD_SLUGS,
   boardPath,
+  commentNoun,
   isUngated,
   slugToBoard,
   progressSentence,
@@ -38,7 +39,11 @@ function Meta({ post, mine }: { post: VisiblePost; mine: boolean }) {
       <span>{post.author_name}</span>
       <span>·</span>
       <time>{post.created_at}</time>
-      {post.comment_count > 0 && <span className="cmt">댓글 {post.comment_count}</span>}
+      {post.comment_count > 0 && (
+        <span className="cmt">
+          {commentNoun(post.board_type)} {post.comment_count}
+        </span>
+      )}
       {post.is_demo_seed && <span className="seed-tag">시연 데이터</span>}
       {mine && <span className="ep-tag">내 글</span>}
     </div>
@@ -138,8 +143,7 @@ export default async function BoardPage({
             {boardType === "question" && (
               <div className="sheet-note">
                 묻는 사람이 본 회차가 곧 대화의 경계예요. 질문자가 본 지점 이후의 전개는
-                꺼내지 않기로 해요. 이번 버전에는 답글 기능이 없어, 질문은 같은 진도에서
-                각자 글로 이어집니다.
+                꺼내지 않기로 해요. 답글은 질문자가 본 지점까지의 내용으로만 달아주세요.
               </div>
             )}
 
@@ -217,7 +221,7 @@ export default async function BoardPage({
                       <span>·</span>
                       <time>{p.created_at}</time>
                       {p.comment_count > 0 && (
-                        <span className="cmt">댓글 {p.comment_count}</span>
+                        <span className="cmt">답글 {p.comment_count}</span>
                       )}
                       {p.is_demo_seed && <span className="seed-tag">시연 데이터</span>}
                       {p.author_id === user.id && <span className="ep-tag">내 글</span>}
@@ -258,6 +262,9 @@ export default async function BoardPage({
                       <span>{p.author_name}</span>
                       <span>·</span>
                       <time>{p.created_at}</time>
+                      {p.comment_count > 0 && (
+                        <span className="cmt">댓글 {p.comment_count}</span>
+                      )}
                       {p.is_demo_seed && <span className="seed-tag">시연 데이터</span>}
                       {p.author_id === user.id && <span className="ep-tag">내 글</span>}
                     </div>

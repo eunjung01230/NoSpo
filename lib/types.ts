@@ -3,6 +3,8 @@ import type { BoardType } from "./boards";
 export type DemoUser = {
   id: string;
   display_name: string;
+  /** 관리자 화면에 들어갈 수 있는 시연 계정인지. 판정은 항상 서버에서 다시 한다. */
+  is_admin: boolean;
 };
 
 export type Work = {
@@ -49,6 +51,8 @@ export type VisiblePost = {
 export type Comment = {
   id: string;
   post_id: string;
+  /** 답글이면 부모 댓글 id. 답글에 또 답글을 달지 않으므로 깊이는 한 단계다. */
+  parent_id: string | null;
   author_id: string;
   author_name: string;
   body: string;

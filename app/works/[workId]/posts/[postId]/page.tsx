@@ -1,17 +1,22 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
+  getHiddenOwnPost,
+  getPostAsAdmin,
   getVisiblePost,
   getProgress,
   getWork,
+  hasReported,
   listComments,
   listStages,
 } from "@/lib/data";
 import { getCurrentUser } from "@/lib/session";
 import DeletePostButton from "./DeletePostButton";
 import Comments from "./Comments";
+import ReportForm from "./ReportForm";
 import {
   BOARD_COMMENTS,
+  commentNoun,
   BOARD_LABELS,
   BOARD_NUMERALS,
   boardPath,
@@ -31,14 +36,43 @@ export default async function PostDetailPage({
 
   const user = await getCurrentUser();
   // 상세 주소로 직접 들어와도 서버에서 사용자와 진도를 확인한다.
-  const post = await getVisiblePost(user.id, workId, postId);
+  // 관리자만은 신고를 판단하기 위해 가려진 글도 열어볼 수 있다(그 사실을 화면에 밝힌다).
+  const visible = await getVisiblePost(user.id, workId, postId);
+  const adminView = !visible && user.is_admin ? await getPostAsAdmin(workId, postId) : null;
+  const post = visible ?? adminView;
 
   if (!post) {
-    const [progress, stages] = await Promise.all([
+    const [progress, stages, hiddenMine] = await Promise.all([
       getProgress(user.id, workId),
       listStages(workId),
+      getHiddenOwnPost(user.id, workId, postId),
     ]);
     const label = stages.find((s) => s.stage_no === progress)?.label ?? "시작 전";
+
+    // 내가 쓴 글이 신고로 가려진 경우. 글은 지워지지 않았고 관리자가 확인한다.
+    if (hiddenMine) {
+      return (
+        <section
+          className="container container-read stack"
+          style={{ gap: 20, paddingBlock: "24px 96px" }}
+        >
+          <Link href={`/works/${workId}`} className="backlink">
+            ← {work.title}
+          </Link>
+          <h1 className="page-title">신고로 가려진 내 글입니다</h1>
+          <div className="notice-dark notice-warn">
+            {hiddenMine.hidden_reason === "admin"
+              ? "관리자가 이 글을 가렸습니다."
+              : `스포일러 신고 ${hiddenMine.report_count}건이 모여 이 글이 가려졌습니다.`}{" "}
+            글은 지워지지 않았고, 관리자가 확인하면 다시 열릴 수 있습니다. 누적 경고가
+            쌓이면 새 글을 쓸 수 없게 됩니다.
+          </div>
+          <span className="muted">
+            고른 회차보다 뒤의 내용이 담겨 있었는지 다시 살펴봐 주세요.
+          </span>
+        </section>
+      );
+    }
     return (
       <section
         className="container container-read stack"
@@ -62,6 +96,7 @@ export default async function PostDetailPage({
   }
 
   const isMine = post.author_id === user.id;
+  const reported = isMine ? false : await hasReported(postId, user.id);
   const canComment = BOARD_COMMENTS[post.board_type];
   // 댓글도 글과 같은 조건으로 서버에서 다시 판정한다(잠긴 글이면 null).
   const comments = canComment ? await listComments(user.id, workId, postId) : null;
@@ -75,6 +110,15 @@ export default async function PostDetailPage({
       <Link href={boardPath(workId, post.board_type)} className="backlink">
         ← {work.title} · {BOARD_LABELS[post.board_type]} 게시판
       </Link>
+
+      {adminView && (
+        <div className="notice-dark notice-warn">
+          관리자 열람입니다. {adminView.hidden_at
+            ? `이 글은 ${adminView.hidden_at}에 가려졌습니다.`
+            : "이 글은 관리자의 진도로는 아직 열리지 않는 글입니다."}{" "}
+          일반 사용자에게는 이 화면이 보이지 않습니다.
+        </div>
+      )}
 
       <article className="sheet sheet-article">
         <div className="row" style={{ gap: "8px 10px", fontSize: 12.5 }}>
@@ -142,13 +186,18 @@ export default async function PostDetailPage({
           comments={comments}
           currentUserId={user.id}
           userLabel={user.display_name}
+          noun={commentNoun(post.board_type)}
         />
       )}
 
-      {!canComment && (
-        <p className="muted" style={{ margin: 0 }}>
-          질문 게시판은 댓글 대신 같은 진도에서 각자 글로 이어집니다.
-        </p>
+      {/* 신고. 읽을 수 있는 글에만 자리가 생기고, 내 글과 관리자 열람은 대상이 아니다. */}
+      {!isMine && !adminView && (
+        <div className="report-slot">
+          <span className="muted" style={{ fontSize: 12.5 }}>
+            내 진도보다 뒤의 내용이 적혀 있나요?
+          </span>
+          <ReportForm workId={workId} postId={postId} alreadyReported={reported} />
+        </div>
       )}
 
       <Link className="btn" style={{ alignSelf: "flex-start" }} href={boardPath(workId, post.board_type)}>

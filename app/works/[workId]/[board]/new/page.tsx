@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getProgress, getWork, listStages } from "@/lib/data";
+import { countWarnings, getProgress, getWork, listStages } from "@/lib/data";
+import { WARNING_BLOCK_THRESHOLD } from "@/lib/moderation";
 import { getCurrentUser } from "@/lib/session";
 import {
   BOARD_CTA,
@@ -30,10 +31,13 @@ export default async function NewPostPage({
   if (!work) notFound();
 
   const user = await getCurrentUser();
-  const [stages, progress] = await Promise.all([
+  const [stages, progress, warnings] = await Promise.all([
     listStages(workId),
     getProgress(user.id, workId),
+    countWarnings(user.id),
   ]);
+  // 정지 여부는 화면에서도 미리 알려주지만, 실제 차단은 서버 액션에서 다시 판정한다.
+  const blocked = warnings >= WARNING_BLOCK_THRESHOLD;
   // 작성자의 전체 진도가 아니라 '글에 포함된 마지막 회차'를 고르는 자리다.
   const selectable = stages.filter((s) => s.stage_no <= progress);
   const currentStage = stages.find((s) => s.stage_no === progress) ?? null;
@@ -63,7 +67,12 @@ export default async function NewPostPage({
           </span>
         </div>
 
-        {selectable.length === 0 && !isUngated(boardType) ? (
+        {blocked ? (
+          <p className="form-error">
+            신고가 확인된 글이 {warnings}건 있어 글쓰기가 멈춰 있습니다. 관리자가 확인하면
+            다시 쓸 수 있습니다.
+          </p>
+        ) : selectable.length === 0 && !isUngated(boardType) ? (
           <p className="form-error">
             아직 진도가 없어 글을 쓸 수 없습니다. 작품 화면에서 진도를 먼저 올려주세요.
           </p>

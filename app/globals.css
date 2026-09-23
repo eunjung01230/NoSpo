@@ -449,3 +449,65 @@ textarea.field { min-height: 300px; resize: vertical; line-height: 1.85; }
   border-top: 1px solid var(--ns-paper-line); padding-top: 16px;
 }
 .comment-form .field { min-height: 92px; }
+
+/* ── 신고 · AI 사전 검토 · 관리자 ──────────────────────────────────── */
+/* 경고는 막는 말이 아니라 되묻는 말이라, 오류(form-error)와 다른 톤으로 둔다. */
+.ai-warn {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 16px 18px; border: 1px solid #C7A79B; border-left: 3px solid var(--ns-primary);
+  border-radius: 2px; background: #F4EBE2;
+}
+.ai-warn .head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.ai-warn .head b { font-family: var(--ns-serif); font-size: 17px; font-weight: 400; color: var(--ns-ink); }
+.ai-warn .by { font-family: var(--ns-mono); font-size: 11px; letter-spacing: 0.04em; color: var(--ns-primary); }
+.ai-warn p { margin: 0; font-size: 14px; line-height: 1.7; color: var(--ns-ink-dim); }
+.ai-warn .note { font-size: 12.5px; line-height: 1.65; color: var(--ns-ink-muted); }
+
+.report-slot {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; padding-top: 4px;
+}
+.report-form {
+  display: flex; flex-direction: column; gap: 12px; width: 100%;
+  padding: 18px; border: 1px solid var(--ns-paper-line); border-radius: 2px;
+  background: var(--ns-paper-hi); color: var(--ns-ink);
+}
+.report-reason { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--ns-ink-dim); }
+.report-reason input { accent-color: var(--ns-primary); }
+.report-done { font-size: 12.5px; line-height: 1.6; color: var(--ns-rose); }
+
+.admin-row {
+  display: grid; align-items: center; gap: 10px 18px;
+  grid-template-columns: 96px minmax(0, 1fr) minmax(0, 220px) auto;
+  padding: 16px clamp(18px, 4%, 28px);
+  border-top: 1px solid var(--ns-paper-line); color: var(--ns-ink);
+}
+.admin-state { display: flex; flex-direction: column; gap: 2px; }
+.admin-state b { font-family: var(--ns-serif); font-size: 15px; font-weight: 400; color: var(--ns-ink); }
+.admin-state b.off { color: var(--ns-primary); }
+.admin-state span { font-family: var(--ns-mono); font-size: 11px; color: var(--ns-ink-faint); }
+.admin-title { font-family: var(--ns-serif); font-size: 17px; line-height: 1.4; }
+.admin-meta { font-size: 12px; color: var(--ns-ink-faint); }
+.admin-reason { font-size: 12.5px; line-height: 1.6; color: var(--ns-ink-muted); }
+.admin-acts { display: flex; align-items: center; gap: 10px; justify-content: flex-end; }
+.admin-btn { padding: 7px 12px; font-size: 12.5px; }
+@media (max-width: 760px) {
+  .admin-row { grid-template-columns: minmax(0, 1fr); }
+  .admin-acts { justify-content: flex-start; }
+}
+
+/* ---------- 답글(한 단계) ---------- */
+.comment-tools { display: flex; align-items: center; gap: 14px; }
+.comment-tools .textlink { font-size: 12.5px; }
+.reply-list {
+  list-style: none; margin: 10px 0 0; padding: 0 0 0 16px;
+  border-left: 2px solid var(--ns-paper-line);
+  display: flex; flex-direction: column;
+}
+.reply-list .comment { padding: 10px 0; border-top: none; }
+.reply-list .comment + .comment { border-top: 1px solid var(--ns-paper-line); }
+.comment.reply .body { font-size: 14px; }
+.reply-editor { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.reply-editor .comment-form { border-top: none; padding-top: 0; }
+.reply-editor .comment-form .field { min-height: 70px; }
+.reply-editor > .textlink { align-self: flex-start; font-size: 12.5px; }

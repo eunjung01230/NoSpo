@@ -3,8 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
-import { DEMO_USER_COOKIE, getCurrentUser, listDemoUsers } from "@/lib/session";
 import {
+  DEMO_USER_COOKIE,
+  getCurrentUser,
+  listDemoUsers,
+  requireAdmin,
+} from "@/lib/session";
+import {
+  canReplyTo,
+  countWarnings,
   createComment,
   createPost,
   deleteOwnComment,
@@ -12,14 +19,28 @@ import {
   getOwnPost,
   getProgress,
   getVisiblePost,
+  getWork,
+  hidePostByAdmin,
   listStages,
+  reportPost,
+  resolveAiFlag,
+  revokeLatestWarning,
   setProgress,
+  unhidePost,
   updateOwnPost,
 } from "@/lib/data";
+import {
+  REPORT_HIDE_THRESHOLD,
+  WARNING_BLOCK_THRESHOLD,
+  isReportReason,
+  screenPost,
+  type Screening,
+} from "@/lib/moderation";
 import {
   BOARD_COMMENTS,
   BOARD_LABELS,
   FREE_STAGE,
+  commentNoun,
   boardPath,
   isUngated,
   toBoardType,
@@ -64,7 +85,19 @@ export async function setProgressAction(formData: FormData) {
   if (before !== stageNo) redirect(`/works/${workId}?from=${before}`);
 }
 
-export type PostFormState = { error?: string };
+export type PostFormState = {
+  error?: string;
+  /**
+   * AI 사전 검토가 걸었을 때만 채운다. 등록을 막지는 않고, 작성자가
+   * 회차를 고쳐 쓸지 이대로 올릴지 정하게 한다(이대로 올리면 관리자 화면에 쌓인다).
+   */
+  warning?: { reason: string; source: Screening["source"] };
+  /**
+   * 되돌려주는 입력값. 서버 액션이 끝나면 React가 폼을 초기화하므로, 경고를 보여주고
+   * 다시 고쳐 쓰게 하려면 쓰던 내용을 그대로 돌려줘야 한다(화면에서 defaultValue로 쓴다).
+   */
+  values?: { title: string; body: string; maxStage: number };
+};
 
 /**
  * 작성·수정 공통 검증: 빈 제목·본문, 없는 회차, 내 진도 초과를 서버에서 막는다.
@@ -102,6 +135,37 @@ function stageFromForm(boardType: BoardType, formData: FormData) {
   return isUngated(boardType) ? FREE_STAGE : Number(formData.get("maxStage"));
 }
 
+/**
+ * 글이 고른 범위를 넘는지 AI에게 미리 물어본다. 결과는 경고까지이고 등록은 막지 않는다
+ * (공개 판정은 여전히 `max_stage <= 진도`뿐이다). 작성자가 경고를 보고도 그대로
+ * 올렸다면 confirmed = true로 저장되어 관리자 화면의 '검토 필요'에 쌓인다.
+ */
+async function screen(
+  workId: string,
+  boardType: BoardType,
+  maxStage: number,
+  title: string,
+  body: string
+): Promise<Screening> {
+  const [work, stages] = await Promise.all([getWork(workId), listStages(workId)]);
+  return screenPost({
+    workTitle: work?.title ?? "",
+    boardType,
+    stageLabel: stages.find((s) => s.stage_no === maxStage)?.label ?? null,
+    totalStages: stages.length,
+    maxStage,
+    title,
+    body,
+  });
+}
+
+/** 경고가 쌓인 사용자는 새 글·수정을 멈춘다. 판정은 항상 DB의 누적 경고 수로 한다. */
+async function blockedByWarnings(userId: string): Promise<string | null> {
+  const warnings = await countWarnings(userId);
+  if (warnings < WARNING_BLOCK_THRESHOLD) return null;
+  return `신고가 확인된 글이 ${warnings}건 있어 글쓰기가 멈춰 있습니다. 관리자 확인 후 다시 쓸 수 있습니다.`;
+}
+
 export async function createPostAction(
   _prev: PostFormState,
   formData: FormData
@@ -113,10 +177,28 @@ export async function createPostAction(
   const body = String(formData.get("body") ?? "").trim();
   const maxStage = stageFromForm(boardType, formData);
 
+  const values = { title, body, maxStage };
   const error = await validate(user.id, workId, boardType, title, body, maxStage);
-  if (error) return { error };
+  if (error) return { error, values };
+  const blocked = await blockedByWarnings(user.id);
+  if (blocked) return { error: blocked, values };
 
-  await createPost({ workId, boardType, authorId: user.id, title, body, maxStage });
+  // 작성자가 경고를 이미 보고 '이대로 등록'을 누른 경우에만 통과시킨다.
+  const confirmed = formData.get("aiConfirmed") === "1";
+  const screening = await screen(workId, boardType, maxStage, title, body);
+  if (screening.verdict === "warn" && !confirmed) {
+    return {
+      warning: { reason: screening.reason!, source: screening.source },
+      values,
+    };
+  }
+
+  await createPost({
+    workId, boardType, authorId: user.id, title, body, maxStage,
+    aiVerdict: screening.verdict,
+    aiReason: screening.reason,
+    aiAcknowledged: screening.verdict === "warn",
+  });
   revalidatePath(`/works/${workId}`);
   redirect(boardPath(workId, boardType));
 }
@@ -134,16 +216,29 @@ export async function updatePostAction(
   const body = String(formData.get("body") ?? "").trim();
   const maxStage = stageFromForm(boardType, formData);
 
+  const values = { title, body, maxStage };
   const error = await validate(user.id, workId, boardType, title, body, maxStage);
-  if (error) return { error };
+  if (error) return { error, values };
 
   const own = await getOwnPost(user.id, workId, postId);
-  if (!own) return { error: "내가 쓴 글만 수정할 수 있습니다." };
+  if (!own) return { error: "내가 쓴 글만 수정할 수 있습니다.", values };
+
+  const confirmed = formData.get("aiConfirmed") === "1";
+  const screening = await screen(workId, boardType, maxStage, title, body);
+  if (screening.verdict === "warn" && !confirmed) {
+    return {
+      warning: { reason: screening.reason!, source: screening.source },
+      values,
+    };
+  }
 
   const ok = await updateOwnPost({
     postId, workId, authorId: user.id, title, body, maxStage,
+    aiVerdict: screening.verdict,
+    aiReason: screening.reason,
+    aiAcknowledged: screening.verdict === "warn",
   });
-  if (!ok) return { error: "내가 쓴 글만 수정할 수 있습니다." };
+  if (!ok) return { error: "내가 쓴 글만 수정할 수 있습니다.", values };
 
   revalidatePath(`/works/${workId}`);
   redirect(`/works/${workId}/posts/${postId}`);
@@ -164,6 +259,9 @@ export async function deletePostAction(formData: FormData) {
 
 export type CommentFormState = { error?: string };
 
+/** 댓글 id는 uuid다. 형식이 아니면 조회 단계에서 터지므로 먼저 걸러낸다. */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
  * 댓글 작성. 댓글을 달 권한은 '그 글이 지금 나에게 공개되는가'와 같다.
  * 글이 잠겨 있으면 글 내용을 받지 못하듯 댓글도 남길 수 없다.
@@ -176,17 +274,24 @@ export async function createCommentAction(
   const workId = String(formData.get("workId") ?? "");
   const postId = String(formData.get("postId") ?? "");
   const body = String(formData.get("body") ?? "").trim();
-
-  if (!body) return { error: "댓글 내용을 입력해 주세요." };
-  if (body.length > 1000) return { error: "댓글은 1000자까지 쓸 수 있습니다." };
+  const parentId = String(formData.get("parentId") ?? "") || null;
 
   const post = await getVisiblePost(user.id, workId, postId);
   if (!post) return { error: "지금 읽을 수 없는 글에는 댓글을 남길 수 없습니다." };
   if (!BOARD_COMMENTS[post.board_type]) {
     return { error: `${BOARD_LABELS[post.board_type]} 게시판은 댓글을 받지 않습니다.` };
   }
+  // 게시판마다 부르는 말이 다르다(질문 게시판은 답글).
+  const noun = parentId ? "답글" : commentNoun(post.board_type);
 
-  await createComment({ postId, authorId: user.id, body });
+  if (!body) return { error: `${noun} 내용을 입력해 주세요.` };
+  if (body.length > 1000) return { error: `${noun}은 1000자까지 쓸 수 있습니다.` };
+  // 답글은 한 단계까지만 — 답글에 다시 답글을 달 수는 없다.
+  if (parentId && (!UUID.test(parentId) || !(await canReplyTo(parentId, postId)))) {
+    return { error: "답글을 달 수 없는 댓글입니다." };
+  }
+
+  await createComment({ postId, authorId: user.id, body, parentId });
   revalidatePath(`/works/${workId}/posts/${postId}`);
   return {};
 }
@@ -197,6 +302,7 @@ export async function deleteCommentAction(formData: FormData) {
   const workId = String(formData.get("workId") ?? "");
   const postId = String(formData.get("postId") ?? "");
   const commentId = String(formData.get("commentId") ?? "");
+  if (!UUID.test(commentId)) throw new Error("잘못된 댓글입니다.");
 
   // 글 자체가 지금 잠겨 있으면 댓글도 건드리지 않는다.
   const post = await getVisiblePost(user.id, workId, postId);
@@ -206,4 +312,75 @@ export async function deleteCommentAction(formData: FormData) {
   if (!ok) throw new Error("내가 쓴 댓글만 삭제할 수 있습니다.");
 
   revalidatePath(`/works/${workId}/posts/${postId}`);
+}
+
+export type ReportFormState = { error?: string; done?: string };
+
+/**
+ * 스포일러 신고. 신고할 수 있는 권한은 '그 글이 지금 나에게 공개되는가'와 같다 —
+ * 읽을 수 없는 글은 신고도 할 수 없다. 신고가 기준만큼 쌓이면 글은 자동으로 가려지고
+ * 작성자에게 경고가 1건 쌓이며, 되돌리는 것은 관리자만 할 수 있다.
+ */
+export async function reportPostAction(
+  _prev: ReportFormState,
+  formData: FormData
+): Promise<ReportFormState> {
+  const user = await getCurrentUser();
+  const workId = String(formData.get("workId") ?? "");
+  const postId = String(formData.get("postId") ?? "");
+  const reason = formData.get("reason");
+  const detail = String(formData.get("detail") ?? "").trim();
+
+  if (!isReportReason(reason)) return { error: "신고 사유를 선택해 주세요." };
+
+  const post = await getVisiblePost(user.id, workId, postId);
+  if (!post) return { error: "지금 읽을 수 없는 글은 신고할 수 없습니다." };
+  if (post.author_id === user.id) return { error: "내가 쓴 글은 신고할 수 없습니다." };
+
+  const { count, hidden } = await reportPost({
+    postId,
+    reporterId: user.id,
+    reason,
+    detail: detail || null,
+    threshold: REPORT_HIDE_THRESHOLD,
+  });
+
+  revalidatePath(`/works/${workId}`, "layout");
+  return {
+    done: hidden
+      ? `신고 ${count}건이 모여 이 글은 가려졌습니다. 관리자가 확인합니다.`
+      : `신고를 접수했습니다. ${REPORT_HIDE_THRESHOLD}건이 모이면 글이 가려집니다. (현재 ${count}건)`,
+  };
+}
+
+/* ── 관리자 동작. 모든 진입점에서 requireAdmin()으로 다시 확인한다. ── */
+
+export async function unhidePostAction(formData: FormData) {
+  await requireAdmin();
+  const postId = String(formData.get("postId") ?? "");
+  await unhidePost(postId);
+  revalidatePath("/admin");
+  revalidatePath("/", "layout");
+}
+
+export async function hidePostAction(formData: FormData) {
+  await requireAdmin();
+  const postId = String(formData.get("postId") ?? "");
+  await hidePostByAdmin(postId, "관리자가 직접 가린 글입니다.");
+  revalidatePath("/admin");
+  revalidatePath("/", "layout");
+}
+
+export async function resolveAiFlagAction(formData: FormData) {
+  await requireAdmin();
+  const postId = String(formData.get("postId") ?? "");
+  await resolveAiFlag(postId);
+  revalidatePath("/admin");
+}
+
+export async function revokeWarningAction(formData: FormData) {
+  await requireAdmin();
+  const userId = String(formData.get("userId") ?? "");
+  await revokeLatestWarning(userId);
+  revalidatePath("/admin");
 }

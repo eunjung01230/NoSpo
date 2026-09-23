@@ -37,12 +37,19 @@ import {
   workExists,
 } from "@/lib/data";
 import {
+  POST_BODY_MAX,
+  POST_TITLE_MAX,
   REPORT_HIDE_THRESHOLD,
   WARNING_BLOCK_THRESHOLD,
   isReportReason,
-  screenPost,
   type Screening,
 } from "@/lib/moderation";
+import {
+  reasonForDb,
+  screenForSave,
+  verdictForDb,
+  type ScreeningScope,
+} from "@/lib/screening";
 import {
   BOARD_COMMENTS,
   BOARD_LABELS,
@@ -51,7 +58,6 @@ import {
   isProgressUnit,
   toBoardType,
   unitNoun,
-  type BoardType,
 } from "@/lib/boards";
 import { boardLabelFor, isCategory, isOrigin, usesOrigin } from "@/lib/categories";
 import { resolveCandidate, searchArtwork, type ArtworkCandidate } from "@/lib/artwork-lookup";
@@ -97,10 +103,13 @@ export async function setProgressAction(formData: FormData) {
 export type PostFormState = {
   error?: string;
   /**
-   * AI 사전 검토가 걸었을 때만 채운다. 등록을 막지는 않고, 작성자가
-   * 회차를 고쳐 쓸지 이대로 올릴지 정하게 한다(이대로 올리면 관리자 화면에 쌓인다).
+   * AI 사전 검토 결과. '문제 없음'이 아니면 저장하지 않고 이것만 돌려준다 — 작성자가
+   * 회차를 고쳐 쓸지 이대로 올릴지 정한다(이대로 올려도 공개 판정은 max_stage 그대로다).
+   * 서버가 고정 문구에서 고른 것만 담기며, AI의 자유 서술이나 원인 코드는 싣지 않는다.
    */
-  warning?: { reason: string; source: Screening["source"] };
+  screening?: Screening;
+  /** 위 결과에 대한 서버 서명. 같은 내용으로 저장할 때 AI를 다시 부르지 않는 데 쓴다. */
+  receipt?: string;
   /**
    * 되돌려주는 입력값. 서버 액션이 끝나면 React가 폼을 초기화하므로, 경고를 보여주고
    * 다시 고쳐 쓰게 하려면 쓰던 내용을 그대로 돌려줘야 한다(화면에서 defaultValue로 쓴다).
@@ -109,20 +118,21 @@ export type PostFormState = {
 };
 
 /**
- * 작성·수정 공통 검증: 빈 제목·본문, 없는 회차, 내 진도 초과를 서버에서 막는다.
+ * 작성·수정 공통 검증: 빈 제목·본문, 길이, 없는 회차, 내 진도 초과를 서버에서 막는다.
  * 게시판에 따른 예외는 없다. 자유 게시판도 회차를 받아 같은 공개 조건
  * (`max_stage <= 읽는 사람의 진도`)을 그대로 따른다.
  */
 async function validate(
   userId: string,
   workId: string,
-  boardType: BoardType,
   title: string,
   body: string,
   maxStage: number
 ) {
   if (!title) return "제목을 입력해 주세요.";
   if (!body) return "본문을 입력해 주세요.";
+  if (title.length > POST_TITLE_MAX) return `제목은 ${POST_TITLE_MAX}자까지 쓸 수 있습니다.`;
+  if (body.length > POST_BODY_MAX) return `본문은 ${POST_BODY_MAX}자까지 쓸 수 있습니다.`;
   const stages = await listStages(workId);
   if (!Number.isInteger(maxStage) || !stages.some((s) => s.stage_no === maxStage)) {
     return "작품에 존재하지 않는 회차입니다.";
@@ -139,35 +149,33 @@ function stageFromForm(formData: FormData) {
   return Number(formData.get("maxStage"));
 }
 
-/**
- * 글이 고른 범위를 넘는지 AI에게 미리 물어본다. 결과는 경고까지이고 등록은 막지 않는다
- * (공개 판정은 여전히 `max_stage <= 진도`뿐이다). 작성자가 경고를 보고도 그대로
- * 올렸다면 confirmed = true로 저장되어 관리자 화면의 '검토 필요'에 쌓인다.
- */
-async function screen(
-  workId: string,
-  boardType: BoardType,
-  maxStage: number,
-  title: string,
-  body: string
-): Promise<Screening> {
-  const [work, stages] = await Promise.all([getWork(workId), listStages(workId)]);
-  return screenPost({
-    workTitle: work?.title ?? "",
-    boardType,
-    stageLabel: stages.find((s) => s.stage_no === maxStage)?.label ?? null,
-    totalStages: stages.length,
-    maxStage,
-    title,
-    body,
-  });
-}
-
 /** 경고가 쌓인 사용자는 새 글·수정을 멈춘다. 판정은 항상 DB의 누적 경고 수로 한다. */
 async function blockedByWarnings(userId: string): Promise<string | null> {
   const warnings = await countWarnings(userId);
   if (warnings < WARNING_BLOCK_THRESHOLD) return null;
   return `신고가 확인된 글이 ${warnings}건 있어 글쓰기가 멈춰 있습니다. 관리자 확인 후 다시 쓸 수 있습니다.`;
+}
+
+/** 폼에서 검토 단계에 필요한 값을 꺼내고, 영수증을 못 쓸 때만 작품·회차 이름을 읽는다. */
+function screenPostForm(formData: FormData, scope: ScreeningScope) {
+  return screenForSave({
+    scope,
+    receipt: formData.get("screenReceipt"),
+    confirmed: formData.get("aiConfirmed") === "1",
+    checkOnly: formData.get("intent") === "check",
+    loadInput: async () => {
+      const [work, stages] = await Promise.all([getWork(scope.workId), listStages(scope.workId)]);
+      return {
+        workTitle: work?.title ?? "",
+        boardType: scope.boardType,
+        stageLabel: stages.find((s) => s.stage_no === scope.maxStage)?.label ?? null,
+        totalStages: stages.length,
+        maxStage: scope.maxStage,
+        title: scope.title,
+        body: scope.body,
+      };
+    },
+  });
 }
 
 export async function createPostAction(
@@ -182,32 +190,30 @@ export async function createPostAction(
   const maxStage = stageFromForm(formData);
 
   const values = { title, body, maxStage };
-  const error = await validate(user.id, workId, boardType, title, body, maxStage);
+  const error = await validate(user.id, workId, title, body, maxStage);
   if (error) return { error, values };
   const blocked = await blockedByWarnings(user.id);
   if (blocked) return { error: blocked, values };
 
-  // 작성자가 경고를 이미 보고 '이대로 등록'을 누른 경우에만 통과시킨다.
-  const confirmed = formData.get("aiConfirmed") === "1";
-  const screening = await screen(workId, boardType, maxStage, title, body);
-  if (screening.verdict === "warn" && !confirmed) {
-    return {
-      warning: { reason: screening.reason!, source: screening.source },
-      values,
-    };
-  }
+  const { screening, receipt, mustShow } = await screenPostForm(formData, {
+    userId: user.id, workId, postId: "new", boardType, maxStage, title, body,
+  });
+  if (mustShow) return { screening, receipt, values };
 
   await createPost({
     workId, boardType, authorId: user.id, title, body, maxStage,
-    aiVerdict: screening.verdict,
-    aiReason: screening.reason,
-    aiAcknowledged: screening.verdict === "warn",
+    aiVerdict: verdictForDb(screening),
+    aiReason: screening.status === "clear" ? null : reasonForDb(screening),
+    aiAcknowledged: screening.status !== "clear",
   });
   revalidatePath(`/works/${workId}`);
   redirect(boardPath(workId, boardType));
 }
 
-/** 수정. 소유권은 SQL 조건으로 확인하고 클라이언트가 보낸 작성자 값은 믿지 않는다. */
+/**
+ * 수정. 소유권은 SQL 조건으로 확인하고 클라이언트가 보낸 작성자 값은 믿지 않는다.
+ * 제목·본문·회차가 바뀌면 영수증이 맞지 않으므로 수정본을 다시 검토한다.
+ */
 export async function updatePostAction(
   _prev: PostFormState,
   formData: FormData
@@ -215,32 +221,30 @@ export async function updatePostAction(
   const user = await getCurrentUser();
   const workId = String(formData.get("workId") ?? "");
   const postId = String(formData.get("postId") ?? "");
-  const boardType = toBoardType(formData.get("boardType"));
   const title = String(formData.get("title") ?? "").trim();
   const body = String(formData.get("body") ?? "").trim();
   const maxStage = stageFromForm(formData);
 
   const values = { title, body, maxStage };
-  const error = await validate(user.id, workId, boardType, title, body, maxStage);
+  const error = await validate(user.id, workId, title, body, maxStage);
   if (error) return { error, values };
+  const blocked = await blockedByWarnings(user.id);
+  if (blocked) return { error: blocked, values };
 
   const own = await getOwnPost(user.id, workId, postId);
   if (!own) return { error: "내가 쓴 글만 수정할 수 있습니다.", values };
 
-  const confirmed = formData.get("aiConfirmed") === "1";
-  const screening = await screen(workId, boardType, maxStage, title, body);
-  if (screening.verdict === "warn" && !confirmed) {
-    return {
-      warning: { reason: screening.reason!, source: screening.source },
-      values,
-    };
-  }
+  // 게시판은 글에 이미 정해진 값을 쓴다(폼 값은 믿지 않는다).
+  const { screening, receipt, mustShow } = await screenPostForm(formData, {
+    userId: user.id, workId, postId, boardType: own.board_type, maxStage, title, body,
+  });
+  if (mustShow) return { screening, receipt, values };
 
   const ok = await updateOwnPost({
     postId, workId, authorId: user.id, title, body, maxStage,
-    aiVerdict: screening.verdict,
-    aiReason: screening.reason,
-    aiAcknowledged: screening.verdict === "warn",
+    aiVerdict: verdictForDb(screening),
+    aiReason: screening.status === "clear" ? null : reasonForDb(screening),
+    aiAcknowledged: screening.status !== "clear",
   });
   if (!ok) return { error: "내가 쓴 글만 수정할 수 있습니다.", values };
 

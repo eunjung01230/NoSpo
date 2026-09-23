@@ -470,6 +470,9 @@ textarea.field { min-height: 300px; resize: vertical; line-height: 1.85; }
 .ai-warn .by { font-family: var(--ns-mono); font-size: 11px; letter-spacing: 0.04em; color: var(--ns-primary); }
 .ai-warn p { margin: 0; font-size: 14px; line-height: 1.7; color: var(--ns-ink-dim); }
 .ai-warn .note { font-size: 12.5px; line-height: 1.65; color: var(--ns-ink-muted); }
+/* 결과별 테두리. 의심만 와인색으로 강조하고, 미검토·판단 불가는 차분하게 둔다. */
+.ai-warn.is-clear { border-color: var(--ns-paper-line); border-left-color: var(--ns-ink-faint); background: var(--ns-paper-hi); }
+.ai-warn.is-uncertain, .ai-warn.is-unavailable { border-color: var(--ns-paper-line); border-left-color: var(--ns-rose); background: var(--ns-paper-hi); }
 
 .report-slot {
   display: flex; align-items: center; justify-content: space-between;

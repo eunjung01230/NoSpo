@@ -586,7 +586,8 @@ export async function listReportedPosts(): Promise<ModerationPost[]> {
 }
 
 /**
- * AI가 경고했는데 작성자가 그대로 올린 글. 등록을 막지 않는 대신 여기에 쌓아 두고
+ * AI가 경고했는데(warn) — 또는 AI가 검토하지 못한 채 규칙 검사가 단서를 찾았는데(rule_warn) —
+ * 작성자가 그대로 올린 글. 등록을 막지 않는 대신 여기에 쌓아 두고
  * 관리자가 직접 읽어 본다. 검토가 끝나면 ai_verdict를 'reviewed'로 바꾼다.
  */
 export async function listAiFlaggedPosts(): Promise<ModerationPost[]> {
@@ -597,7 +598,7 @@ export async function listAiFlaggedPosts(): Promise<ModerationPost[]> {
       join works w on w.id = p.work_id
       join users u on u.id = p.author_id
       left join work_stages s on s.work_id = p.work_id and s.stage_no = p.max_stage
-    where p.ai_verdict = 'warn'
+    where p.ai_verdict in ('warn', 'rule_warn')
     order by p.created_at desc
   `) as ModerationPost[];
 }
@@ -655,7 +656,8 @@ export async function hidePostByAdmin(postId: string, note: string): Promise<boo
 export async function resolveAiFlag(postId: string): Promise<boolean> {
   const db = sql();
   const rows = (await db`
-    update posts set ai_verdict = 'reviewed' where id = ${postId} and ai_verdict = 'warn'
+    update posts set ai_verdict = 'reviewed'
+    where id = ${postId} and ai_verdict in ('warn', 'rule_warn')
     returning id
   `) as { id: string }[];
   return rows.length > 0;

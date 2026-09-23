@@ -168,7 +168,7 @@ export default async function AdminPage() {
                   <b className={p.hidden_at ? "off" : undefined}>
                     {p.hidden_at ? "가려짐" : "공개 중"}
                   </b>
-                  <span>AI 경고</span>
+                  <span>{p.ai_verdict === "rule_warn" ? "규칙 경고 · AI 미검토" : "AI 경고"}</span>
                 </span>
                 <PostLine p={p} />
                 <span className="admin-reason">{p.ai_reason ?? "사유 기록 없음"}</span>

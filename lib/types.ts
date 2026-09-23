@@ -11,6 +11,13 @@ export type Work = {
   title: string;
   description: string;
   progress_unit: string;
+  category: string | null;
+  origin: string | null;
+  genre: string | null;
+  /** 공개 API가 제공하는 포스터 주소. 이미지 파일은 저장하지 않는다. */
+  poster_url: string | null;
+  year: string | null;
+  creator: string | null;
 };
 
 export type Stage = {

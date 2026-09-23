@@ -5,7 +5,8 @@ import type { Stage, VisiblePost, Work } from "./types";
 export async function listWorks(): Promise<Work[]> {
   const db = sql();
   return (await db`
-    select id, board, title, description, progress_unit, category, origin, genre
+    select id, board, title, description, progress_unit, category, origin, genre,
+           poster_url, year, creator
     from works
     order by title
   `) as Work[];
@@ -14,7 +15,8 @@ export async function listWorks(): Promise<Work[]> {
 export async function getWork(workId: string): Promise<Work | null> {
   const db = sql();
   const rows = (await db`
-    select id, board, title, description, progress_unit, category, origin, genre
+    select id, board, title, description, progress_unit, category, origin, genre,
+           poster_url, year, creator
     from works where id = ${workId}
   `) as Work[];
   return rows[0] ?? null;
@@ -193,7 +195,7 @@ export async function listWorkCards(
   const { category = null, origin = null, genre = null } = filter;
   return (await db`
     select w.id, w.board, w.title, w.description, w.progress_unit,
-           w.category, w.origin, w.genre,
+           w.category, w.origin, w.genre, w.poster_url, w.year, w.creator,
            (select count(*)::int from work_stages s where s.work_id = w.id) as total_stages,
            coalesce(up.stage_no, 0) as progress,
            (select s.label from work_stages s

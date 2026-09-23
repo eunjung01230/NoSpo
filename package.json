@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "db:setup": "node scripts/db-setup.mjs",
-    "db:check": "node scripts/db-check.mjs"
+    "db:check": "node scripts/db-check.mjs",
+    "posters": "node scripts/fetch-posters.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

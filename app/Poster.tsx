@@ -1,6 +1,7 @@
 /**
- * 포스터 이미지가 없는 작품도 레이아웃이 깨지지 않도록 쓰는 자리표시자.
- * 색은 작품 id에서 결정적으로 만들며, 특정 작품을 하드코딩하지 않는다.
+ * 작품 포스터. 공개 API가 준 이미지 주소가 있으면 그걸 쓰고, 없으면 레이아웃이
+ * 깨지지 않도록 같은 비율의 자리표시자를 보여준다. 색은 작품 id에서 결정적으로
+ * 만들며 특정 작품을 하드코딩하지 않는다.
  */
 function hash(id: string) {
   let h = 0;
@@ -19,15 +20,33 @@ export function posterStyle(workId: string) {
 
 export default function Poster({
   workId,
+  posterUrl,
+  title,
   className = "poster",
   style,
   label = true,
 }: {
   workId: string;
+  posterUrl?: string | null;
+  title?: string;
   className?: string;
   style?: React.CSSProperties;
   label?: boolean;
 }) {
+  if (posterUrl) {
+    return (
+      <div className={className} style={{ ...posterStyle(workId), ...style }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={posterUrl}
+          alt={title ? `${title} 포스터` : ""}
+          loading="lazy"
+          className="poster-img"
+        />
+      </div>
+    );
+  }
+
   return (
     <div className={className} style={{ ...posterStyle(workId), ...style }} aria-hidden>
       {label && <span>POSTER</span>}

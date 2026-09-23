@@ -28,12 +28,15 @@ export default function WorkIntro({
     >
       <Poster
         workId={work.id}
+        posterUrl={work.poster_url}
+        title={work.title}
         label={false}
         style={{ flex: `0 0 ${compact ? 64 : 112}px`, borderColor: "#564A43" }}
       />
       <div className="stack" style={{ flex: "1 1 260px", gap: 9 }}>
         <span style={{ fontSize: 12.5, color: "var(--ns-rose)" }}>
           {work.board} · {length}
+          {work.year ? ` · ${work.year}` : ""}
         </span>
         {compact ? (
           <span className="page-title" style={{ fontSize: "clamp(22px, 2.6vw, 30px)" }}>
@@ -41,6 +44,9 @@ export default function WorkIntro({
           </span>
         ) : (
           <h1 className="page-title">{work.title}</h1>
+        )}
+        {!compact && work.creator && (
+          <span style={{ fontSize: 13, color: "var(--ns-muted-dim)" }}>{work.creator}</span>
         )}
         {!compact && (
           <p

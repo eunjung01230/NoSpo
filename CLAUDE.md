@@ -43,6 +43,12 @@ Vercel 프로젝트 `nospo`에 Neon 통합으로 `DATABASE_URL` 등이 Preview/P
 등록되어 있다. Secret이라 `vercel env pull`로는 값을 내려받을 수 없으므로, 로컬은 Neon
 콘솔의 연결 문자열을 `.env.local`에 직접 입력한다. 연결 확인은 `npm run db:check`.
 
+## 작품 메타
+포스터 이미지는 저작권이 있으므로 파일을 저장하지 않고, 공개 API가 주는 주소만
+works.poster_url에 담아 불러온다(영화·드라마·애니는 TMDB — TMDB_API_KEY 필요,
+책·만화는 Open Library). 채우는 스크립트는 npm run posters이며, 주소가 없으면 같은
+비율의 자리표시자가 나온다. 줄거리 전문·대사는 저장하지 않고 한 문단 소개와 연도·제작자만 둔다.
+
 ## 카테고리
 작품은 분야(works.category: movie/drama/anime/comic/book), 국내외(works.origin:
 domestic/foreign, 영화·드라마만), 장르(works.genre)로 분류한다. 탐색은 왼쪽 CATEGORIES 사이드바(app/CategorySidebar.tsx)로 하며, 현재 분야 아래에

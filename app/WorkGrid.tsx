@@ -24,12 +24,18 @@ export default function WorkGrid({ works }: { works: WorkCard[] }) {
             : `${w.progress_label ?? `${w.progress}${unit}`}까지`;
         return (
           <Link key={w.id} href={`/works/${w.id}`} className="work-card">
-            <Poster workId={w.id} />
+            <Poster workId={w.id} posterUrl={w.poster_url} title={w.title} />
             <div className="stack" style={{ gap: 5 }}>
               <div className="meta">
                 <span style={{ color: "var(--ns-rose)" }}>{w.board}</span>
                 <span style={{ color: "#6E6259" }}>·</span>
                 <span style={{ color: "var(--ns-muted-dim)" }}>{length}</span>
+                {w.year && (
+                  <>
+                    <span style={{ color: "#6E6259" }}>·</span>
+                    <span style={{ color: "var(--ns-muted-dim)" }}>{w.year}</span>
+                  </>
+                )}
               </div>
               <span className="title">{w.title}</span>
               <p className="intro">{w.description}</p>

@@ -62,6 +62,9 @@ await db`create index if not exists posts_work_board_stage_idx
 await db`alter table works add column if not exists category text`;
 await db`alter table works add column if not exists origin text`;
 await db`alter table works add column if not exists genre text`;
+await db`alter table works add column if not exists poster_url text`;
+await db`alter table works add column if not exists year text`;
+await db`alter table works add column if not exists creator text`;
 await db`create index if not exists works_category_idx on works (category, origin, genre)`;
 
 await db`insert into users (id, display_name) values
@@ -73,61 +76,71 @@ await db`insert into users (id, display_name) values
 const works = [
   {
     id: "squid-game-s1", category: "drama", origin: "domestic", genre: "스릴러", board: "드라마(국내)", title: "오징어 게임 시즌 1",
-    description: "정체불명의 게임에 초대된 참가자들을 다룬 한국 드라마. 시즌 1은 전 9화 구성입니다.",
+    description: "빚에 몰린 사람들이 거액의 상금이 걸린 의문의 게임에 초대되는 한국 서바이벌 드라마. 시즌 1은 전 9화이며 황동혁이 각본과 연출을 맡았습니다.",
+    year: "2021", creator: "황동혁 연출 · 넷플릭스",
     unit: "episode", stages: 9, suffix: "화",
     progress: { "user-a": 3, "user-b": 8 },
   },
   {
     id: "stranger-things-s1", category: "drama", origin: "foreign", genre: "SF", board: "드라마(외국)", title: "기묘한 이야기 시즌 1",
-    description: "작은 마을에서 벌어지는 사건을 다룬 미국 드라마. 시즌 1은 전 8화 구성입니다.",
+    description: "1980년대 미국의 작은 마을에서 한 소년이 사라지며 시작되는 미스터리 드라마. 시즌 1은 전 8화이고 시대극 감성에 SF·호러가 섞여 있습니다.",
+    year: "2016", creator: "더퍼 형제 · 넷플릭스",
     unit: "episode", stages: 8, suffix: "화",
     progress: { "user-a": 2, "user-b": 6 },
   },
   {
     id: "attack-on-titan-s1", category: "anime", origin: null, genre: "액션", board: "애니", title: "진격의 거인 시즌 1",
-    description: "거인과 인류의 대립을 그린 일본 애니메이션. 시즌 1은 전 25화 구성입니다.",
+    description: "거인의 위협 속에서 벽 안에 살아가는 인류를 그린 일본 애니메이션. 시즌 1은 전 25화이며 같은 원작의 만화와는 진도를 따로 관리합니다.",
+    year: "2013", creator: "이사야마 하지메 원작 · WIT STUDIO",
     unit: "episode", stages: 25, suffix: "화",
     progress: { "user-a": 5, "user-b": 18 },
   },
   {
     id: "one-piece-manga", category: "comic", origin: null, genre: "모험", board: "만화", title: "원피스 (만화책)",
-    description: "해적들의 대항해를 그린 일본 만화. 진도는 몇 권까지 읽었는지로 기록합니다.",
+    description: "해적왕을 꿈꾸는 소년과 동료들의 대항해를 그린 장편 만화. 연재가 이어지고 있어 진도는 몇 권까지 읽었는지로 기록합니다.",
+    year: "1997~", creator: "오다 에이이치로 · 주간 소년 점프",
     unit: "volume", stages: 110, suffix: "권",
     progress: { "user-a": 12, "user-b": 60 },
   },
   {
     id: "solo-leveling-webtoon", category: "comic", origin: null, genre: "액션", board: "만화", title: "나 혼자만 레벨업 (웹툰)",
-    description: "헌터들이 등장하는 한국 웹툰. 진도는 몇 화까지 읽었는지로 기록합니다.",
+    description: "게이트와 헌터가 등장하는 세계에서 가장 약한 헌터가 성장하는 한국 웹툰. 진도는 몇 화까지 읽었는지로 기록합니다.",
+    year: "2018", creator: "추공 원작 · 장성락 작화 · 카카오페이지",
     unit: "episode", stages: 179, suffix: "화",
     progress: { "user-a": 20, "user-b": 95 },
   },
   {
     id: "harry-potter-novels", category: "book", origin: null, genre: "판타지", board: "책", title: "해리 포터 시리즈 (소설)",
-    description: "마법 학교를 배경으로 한 판타지 소설 시리즈. 진도는 몇 권까지 읽었는지로 기록합니다.",
+    description: "마법 학교 호그와트를 배경으로 한 판타지 소설 시리즈. 전 7권이며 진도는 몇 권까지 읽었는지로 기록합니다.",
+    year: "1997~2007", creator: "J. K. 롤링",
     unit: "volume", stages: 7, suffix: "권",
     progress: { "user-a": 2, "user-b": 5 },
   },
   {
     id: "mcu-infinity-saga", category: "movie", origin: "foreign", genre: "히어로", board: "영화(외국)", title: "마블 시네마틱 유니버스: 인피니티 사가",
-    description: "여러 영화가 이어지는 미국 슈퍼히어로 프랜차이즈. 진도는 개봉 순으로 몇 편까지 봤는지 기록합니다.",
+    description: "여러 히어로 영화가 하나의 세계관으로 이어지는 미국 프랜차이즈. 인피니티 사가는 개봉 순 23편이며 진도는 몇 편까지 봤는지로 기록합니다.",
+    year: "2008~2019", creator: "마블 스튜디오",
     unit: "film", stages: 23, suffix: "편",
     progress: { "user-a": 6, "user-b": 15 },
   },
   {
     id: "dark-knight-trilogy", category: "movie", origin: "foreign", genre: "범죄", board: "영화(외국)", title: "다크 나이트 3부작",
-    description: "한 히어로를 다룬 영화 3부작. 진도는 몇 편까지 봤는지로 기록합니다.",
+    description: "한 도시의 자경단 히어로를 현실적인 톤으로 그린 영화 3부작. 진도는 몇 편까지 봤는지로 기록합니다.",
+    year: "2005~2012", creator: "크리스토퍼 놀런 감독",
     unit: "film", stages: 3, suffix: "편",
     progress: { "user-a": 1, "user-b": 3 },
   },
   {
     id: "interstellar", category: "movie", origin: "foreign", genre: "SF", board: "영화(외국)", title: "인터스텔라",
-    description: "우주 탐사를 다룬 단일 영화. 회차가 없으므로 봤는지 여부만 기록합니다.",
+    description: "황폐해진 지구를 떠나 새로운 터전을 찾아 나서는 우주 탐사 영화. 169분 단일 작품이라 봤는지 여부만 기록합니다.",
+    year: "2014", creator: "크리스토퍼 놀런 감독",
     unit: "single", stages: 1, suffix: "", singleLabel: "봤다",
     progress: { "user-a": 0, "user-b": 1 },
   },
   {
     id: "parasite", category: "movie", origin: "domestic", genre: "스릴러", board: "영화(국내)", title: "기생충",
-    description: "두 가족을 둘러싼 이야기를 그린 한국 단일 영화. 봤는지 여부만 기록합니다.",
+    description: "두 가족이 얽히며 벌어지는 일을 그린 한국 영화. 132분 단일 작품이라 봤는지 여부만 기록합니다.",
+    year: "2019", creator: "봉준호 감독",
     unit: "single", stages: 1, suffix: "", singleLabel: "봤다",
     progress: { "user-a": 1, "user-b": 0 },
   },
@@ -148,12 +161,16 @@ for (const oldId of ["frieren-s1", "lotr-trilogy"]) {
 
 for (const w of works) {
   await db`insert into works (id, board, title, description, progress_unit,
-                             category, origin, genre)
+                             category, origin, genre, year, creator, poster_url)
     values (${w.id}, ${w.board}, ${w.title}, ${w.description}, ${w.unit},
-            ${w.category}, ${w.origin}, ${w.genre})
+            ${w.category}, ${w.origin}, ${w.genre}, ${w.year ?? null},
+            ${w.creator ?? null}, ${w.poster ?? null})
     on conflict (id) do update set board = excluded.board, title = excluded.title,
       description = excluded.description, progress_unit = excluded.progress_unit,
-      category = excluded.category, origin = excluded.origin, genre = excluded.genre`;
+      category = excluded.category, origin = excluded.origin, genre = excluded.genre,
+      year = excluded.year, creator = excluded.creator,
+      -- 포스터는 별도 스크립트(npm run posters)로 채우므로 기존 값을 지우지 않는다.
+      poster_url = coalesce(excluded.poster_url, works.poster_url)`;
   if (w.singleLabel) {
     await db`insert into work_stages (work_id, stage_no, label)
       values (${w.id}, 1, ${w.singleLabel})

@@ -36,6 +36,23 @@ export default async function SiteHeader() {
     <header className="site-header">
       <div className="container inner">
         {wordmark}
+        {/* 작품 탐색 입구. 검색은 작품만 찾고 글은 찾지 않는다. */}
+        <nav className="head-nav">
+          <Link href="/search" className="icon-btn" aria-label="작품 검색">
+            <svg width="17" height="17" viewBox="0 0 20 20" aria-hidden focusable="false">
+              <circle cx="8.6" cy="8.6" r="5.6" fill="none" stroke="currentColor" strokeWidth="1.8" />
+              <path d="M12.8 12.8 L17 17" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+            <span>검색</span>
+          </Link>
+          <Link href="/works/new" className="icon-btn" aria-label="작품 추가">
+            <svg width="17" height="17" viewBox="0 0 20 20" aria-hidden focusable="false">
+              <path d="M10 3.6 V16.4 M3.6 10 H16.4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+            <span>작품 추가</span>
+          </Link>
+        </nav>
+
         <div className="user-switch">
           {/* 관리자로 전환했을 때만 보이는 입구. 권한은 화면에서 다시 확인한다. */}
           {current.is_admin && (

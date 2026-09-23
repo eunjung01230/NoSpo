@@ -211,3 +211,21 @@ export function stageQuestion(progressUnit: string) {
     ? "이 글의 내용 범위를 선택해 주세요."
     : `이 글에 몇 ${unitNoun(progressUnit)}까지의 내용이 포함되어 있나요?`;
 }
+
+/**
+ * 진도 단위. 작품을 등록할 때 고르는 값이며 works.progress_unit에 그대로 들어간다.
+ * 단일 작품(single)은 단계가 하나뿐이라 회차를 묻지 않는다.
+ */
+export const PROGRESS_UNITS = ["episode", "film", "volume", "single"] as const;
+export type ProgressUnit = (typeof PROGRESS_UNITS)[number];
+
+export const PROGRESS_UNIT_LABELS: Record<ProgressUnit, string> = {
+  episode: "화 (드라마·애니·웹툰처럼 회차로 이어지는 작품)",
+  film: "편 (시리즈로 이어지는 영화)",
+  volume: "권 (책·만화책)",
+  single: "단일 작품 (한 편으로 끝나는 영화·책)",
+};
+
+export function isProgressUnit(v: unknown): v is ProgressUnit {
+  return typeof v === "string" && (PROGRESS_UNITS as readonly string[]).includes(v);
+}

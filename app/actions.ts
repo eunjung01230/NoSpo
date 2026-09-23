@@ -14,7 +14,9 @@ import {
   countWarnings,
   createComment,
   createPost,
+  createWork,
   deleteOwnComment,
+  findWorkByTitle,
   deleteOwnPost,
   getOwnPost,
   getProgress,
@@ -28,6 +30,7 @@ import {
   setProgress,
   unhidePost,
   updateOwnPost,
+  workExists,
 } from "@/lib/data";
 import {
   REPORT_HIDE_THRESHOLD,
@@ -42,10 +45,14 @@ import {
   FREE_STAGE,
   commentNoun,
   boardPath,
+  isProgressUnit,
   isUngated,
   toBoardType,
+  unitNoun,
   type BoardType,
 } from "@/lib/boards";
+import { boardLabelFor, isCategory, isOrigin, usesOrigin } from "@/lib/categories";
+import { lookupArtwork } from "@/lib/artwork-lookup";
 
 /** 시연 사용자 전환. 쿠키에는 서버에서 확인한 사용자 id만 저장한다. */
 export async function switchUserAction(formData: FormData) {
@@ -383,4 +390,102 @@ export async function revokeWarningAction(formData: FormData) {
   const userId = String(formData.get("userId") ?? "");
   await revokeLatestWarning(userId);
   revalidatePath("/admin");
+}
+
+export type WorkFormState = {
+  error?: string;
+  values?: Record<string, string>;
+};
+
+/** 제목으로 작품 id를 만든다. 한글 제목은 슬러그로 남지 않으므로 짧은 임의 문자열을 붙인다. */
+function workIdFrom(title: string) {
+  const base = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+  const suffix = Math.random().toString(36).slice(2, 8);
+  return base ? `${base}-${suffix}` : `work-${suffix}`;
+}
+
+/**
+ * 새 작품 등록. 저작권 보호를 위해 작품명·분야·진도 단위·한 줄 소개만 받고,
+ * 포스터 주소와 연도·제작자는 공개 API에서 한 번 찾아 채운다(실패해도 등록은 진행된다).
+ * 회차 표기는 여기서 만들어 두고, 화면에서는 work_stages의 label만 읽는다.
+ */
+export async function createWorkAction(
+  _prev: WorkFormState,
+  formData: FormData
+): Promise<WorkFormState> {
+  const user = await getCurrentUser();
+  const title = String(formData.get("title") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim();
+  const category = String(formData.get("category") ?? "");
+  const originRaw = String(formData.get("origin") ?? "");
+  const genre = String(formData.get("genre") ?? "").trim();
+  const progressUnit = String(formData.get("progressUnit") ?? "");
+  const stagesRaw = Number(formData.get("stages"));
+  const minutesRaw = String(formData.get("minutes") ?? "").trim();
+
+  const values = {
+    title, description, category, origin: originRaw, genre,
+    progressUnit, stages: String(formData.get("stages") ?? ""), minutes: minutesRaw,
+  };
+  const fail = (error: string) => ({ error, values });
+
+  if (!title) return fail("작품명을 입력해 주세요.");
+  if (title.length > 80) return fail("작품명은 80자까지 쓸 수 있습니다.");
+  if (!description) return fail("한 줄 소개를 입력해 주세요.");
+  if (description.length > 300) {
+    return fail("한 줄 소개는 300자까지 쓸 수 있습니다. 줄거리 전문은 넣지 말아주세요.");
+  }
+  if (!isCategory(category)) return fail("분야를 선택해 주세요.");
+  if (!isProgressUnit(progressUnit)) return fail("진도 단위를 선택해 주세요.");
+
+  // 영화·드라마만 국내/외국을 나눈다. 나머지 분야에서는 값을 받지 않는다.
+  const origin = usesOrigin(category) ? originRaw : "";
+  if (usesOrigin(category) && !isOrigin(origin)) return fail("국내·외국을 선택해 주세요.");
+
+  // 단일 작품은 회차를 억지로 나누지 않는다(단계 1개).
+  const stages = progressUnit === "single" ? 1 : stagesRaw;
+  if (progressUnit !== "single" && (!Number.isInteger(stages) || stages < 1 || stages > 2000)) {
+    return fail("회차 수는 1에서 2000 사이의 숫자로 적어주세요.");
+  }
+  const minutes = minutesRaw ? Number(minutesRaw) : null;
+  if (minutes !== null && (!Number.isInteger(minutes) || minutes < 1 || minutes > 1000)) {
+    return fail("한 회차 감상 시간은 1에서 1000분 사이로 적어주세요.");
+  }
+
+  const existing = await findWorkByTitle(title);
+  if (existing) {
+    return fail(`'${existing.title}'은(는) 이미 등록되어 있습니다. 검색에서 찾아 들어가 주세요.`);
+  }
+
+  let id = workIdFrom(title);
+  while (await workExists(id)) id = workIdFrom(title);
+
+  // 외부 조회는 실패하거나 느려도 등록을 막지 않는다(빈 메타로 진행).
+  const meta = await lookupArtwork(title, category);
+
+  await createWork({
+    id,
+    title,
+    description,
+    category,
+    origin: origin || null,
+    genre: genre || null,
+    progressUnit,
+    stages,
+    unitSuffix: unitNoun(progressUnit),
+    minutesPerStage: minutes,
+    boardLabel: boardLabelFor(category, origin || null),
+    year: meta.year,
+    creator: meta.creator,
+    posterUrl: meta.posterUrl,
+    createdBy: user.id,
+  });
+
+  revalidatePath("/", "layout");
+  // 등록한 사람이 바로 진도를 정하고 글을 쓸 수 있도록 작품 화면으로 보낸다.
+  redirect(`/works/${id}`);
 }

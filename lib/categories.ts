@@ -73,3 +73,12 @@ export function categoryPath(category: Category, origin?: Origin, genre?: string
   if (genre) parts.push(genreSlug(genre));
   return parts.join("/");
 }
+
+/**
+ * 작품 카드에 붙는 분야 표기(works.board). 영화·드라마만 국내·외국을 함께 적는다.
+ * 새 작품을 등록할 때 이 함수로 만들어 둔다.
+ */
+export function boardLabelFor(category: Category, origin: string | null) {
+  const label = CATEGORY_LABELS[category];
+  return isOrigin(origin) ? `${label}(${ORIGIN_LABELS[origin]})` : label;
+}

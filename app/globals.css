@@ -511,3 +511,23 @@ textarea.field { min-height: 300px; resize: vertical; line-height: 1.85; }
 .reply-editor .comment-form { border-top: none; padding-top: 0; }
 .reply-editor .comment-form .field { min-height: 70px; }
 .reply-editor > .textlink { align-self: flex-start; font-size: 12.5px; }
+
+/* ── 작품 검색 · 작품 추가 ─────────────────────────────────────────── */
+.head-nav { display: flex; align-items: center; gap: 6px; margin-inline-start: auto; }
+.icon-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 11px; border: 1px solid var(--ns-line); border-radius: 999px;
+  font-size: 12.5px; color: var(--ns-muted); background: var(--ns-surface);
+}
+.icon-btn:hover { color: var(--ns-text); border-color: #6A5A50; }
+.icon-btn svg { display: block; }
+.search-bar { display: flex; gap: 8px; flex-wrap: wrap; max-width: 560px; }
+.search-bar .field { flex: 1 1 240px; }
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+@media (max-width: 560px) {
+  .head-nav .icon-btn span { display: none; }
+  .head-nav .icon-btn { padding: 7px 9px; }
+}

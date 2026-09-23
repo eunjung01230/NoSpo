@@ -91,6 +91,10 @@ await db`alter table works add column if not exists creator text`;
 // 감상에 걸리는 시간(한 회차·편·권 평균 분). 러닝타임과 평균 분량만 담는 표시용 값이다.
 await db`alter table works add column if not exists minutes_per_stage int`;
 await db`create index if not exists works_category_idx on works (category, origin, genre)`;
+// 사용자가 직접 등록한 작품. 운영 측이 미리 넣은 작품과 구분해서 표시하기 위한 값이며,
+// 공개 판정이나 조회 조건에는 관여하지 않는다.
+await db`alter table works add column if not exists created_by text references users(id)`;
+await db`alter table works add column if not exists created_at timestamptz not null default now()`;
 
 // 신고·경고·관리자. 공개 판정(max_stage <= 진도)은 그대로 두고 그 위에 얹는 안전장치다.
 // 관리자 여부는 users에 한 컬럼으로 두고, 시연 관리자 계정을 하나 등록한다.

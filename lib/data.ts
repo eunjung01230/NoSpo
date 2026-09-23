@@ -678,3 +678,90 @@ export async function getPostAsAdmin(
   `) as (VisiblePost & { hidden_at: string | null })[];
   return rows[0] ?? null;
 }
+
+/* ── 작품 검색 · 작품 등록 ─────────────────────────────────────────────
+   검색은 작품 메타(제목·제작자·한 줄 소개)만 훑는다. 글은 검색하지 않으므로
+   잠긴 글의 제목·본문이 검색 결과로 새어 나갈 길이 없다. */
+
+/** 작품 검색. 카드에 필요한 값은 탐색 화면과 같은 모양으로 돌려준다. */
+export async function searchWorks(userId: string, query: string): Promise<WorkCard[]> {
+  const q = query.trim();
+  if (!q) return [];
+  const db = sql();
+  const like = `%${q}%`;
+  return (await db`
+    select w.id, w.board, w.title, w.description, w.progress_unit,
+           w.category, w.origin, w.genre, w.poster_url, w.year, w.creator,
+           w.minutes_per_stage,
+           (select count(*)::int from work_stages s where s.work_id = w.id) as total_stages,
+           coalesce(up.stage_no, 0) as progress,
+           (select s.label from work_stages s
+             where s.work_id = w.id and s.stage_no = coalesce(up.stage_no, 0)) as progress_label
+    from works w
+      left join user_progress up on up.work_id = w.id and up.user_id = ${userId}
+    where w.title ilike ${like}
+       or coalesce(w.creator, '') ilike ${like}
+       or w.description ilike ${like}
+    order by (w.title ilike ${q + "%"}) desc, w.title
+    limit 40
+  `) as WorkCard[];
+}
+
+/** 같은 제목이 이미 있는지. 중복 등록 대신 기존 작품으로 안내하기 위한 조회다. */
+export async function findWorkByTitle(title: string): Promise<{ id: string; title: string } | null> {
+  const db = sql();
+  const rows = (await db`
+    select id, title from works where lower(trim(title)) = lower(trim(${title})) limit 1
+  `) as { id: string; title: string }[];
+  return rows[0] ?? null;
+}
+
+export async function workExists(id: string): Promise<boolean> {
+  const db = sql();
+  const rows = (await db`select 1 from works where id = ${id}`) as unknown[];
+  return rows.length > 0;
+}
+
+/**
+ * 새 작품 등록. 회차는 작품 등록과 한 묶음이라 여기서 함께 만든다.
+ * 단일 작품(progress_unit = single)은 단계가 하나뿐이고 이름은 '봤다'이다.
+ */
+export async function createWork(input: {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  origin: string | null;
+  genre: string | null;
+  progressUnit: string;
+  stages: number;
+  unitSuffix: string;
+  minutesPerStage: number | null;
+  boardLabel: string;
+  year: string | null;
+  creator: string | null;
+  posterUrl: string | null;
+  createdBy: string;
+}) {
+  const db = sql();
+  await db`
+    insert into works (id, board, title, description, progress_unit, category, origin, genre,
+                       year, creator, poster_url, minutes_per_stage, created_by)
+    values (${input.id}, ${input.boardLabel}, ${input.title}, ${input.description},
+            ${input.progressUnit}, ${input.category}, ${input.origin}, ${input.genre},
+            ${input.year}, ${input.creator}, ${input.posterUrl}, ${input.minutesPerStage},
+            ${input.createdBy})
+  `;
+  if (input.progressUnit === "single") {
+    await db`
+      insert into work_stages (work_id, stage_no, label) values (${input.id}, 1, '봤다')
+      on conflict (work_id, stage_no) do nothing
+    `;
+  } else {
+    await db`
+      insert into work_stages (work_id, stage_no, label)
+      select ${input.id}, i, i || ${input.unitSuffix} from generate_series(1, ${input.stages}) as i
+      on conflict (work_id, stage_no) do nothing
+    `;
+  }
+}

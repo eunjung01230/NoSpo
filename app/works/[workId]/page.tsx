@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import {
+  canEditWork,
   countLockedByBoard,
   countMyPosts,
   countPostsBetween,
@@ -58,13 +59,22 @@ export default async function WorkRoomPage({
   const stageLabel = (n: number) =>
     stages.find((s) => s.stage_no === n)?.label ?? "아직 보지 않음";
   const lockedTotal = Object.values(locked).reduce((a, b) => a + b, 0);
+  const canEdit = await canEditWork(workId, user.id, user.is_admin);
 
   return (
     <>
       <section className="container stack" style={{ gap: 24, paddingBlock: "24px 36px" }}>
-        <Link href="/" className="backlink">
-          ← 작품 탐색
-        </Link>
+        <div className="row" style={{ justifyContent: "space-between" }}>
+          <Link href="/" className="backlink">
+            ← 작품 탐색
+          </Link>
+          {/* 작품 정보를 고칠 수 있는 사람에게만 보인다(권한은 수정 화면과 액션에서 다시 본다). */}
+          {canEdit && (
+            <Link href={`/works/${workId}/edit`} className="muted" style={{ fontSize: 12.5 }}>
+              작품 정보 수정
+            </Link>
+          )}
+        </div>
 
         {changed && previous !== null && (
           <div className="notice-dark" role="status">

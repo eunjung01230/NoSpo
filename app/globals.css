@@ -531,3 +531,26 @@ textarea.field { min-height: 300px; resize: vertical; line-height: 1.85; }
   .head-nav .icon-btn span { display: none; }
   .head-nav .icon-btn { padding: 7px 9px; }
 }
+
+/* 작품 정보 연결 — 공개 API 후보를 눈으로 확인하고 고르는 자리 */
+.meta-now {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 14px; border: 1px solid var(--ns-paper-line); border-radius: 2px;
+  background: var(--ns-paper-hi);
+}
+.meta-now b { font-family: var(--ns-serif); font-size: 15px; font-weight: 400; color: var(--ns-ink); }
+.meta-thumb {
+  flex: none; width: 44px; height: 62px; object-fit: cover;
+  border: 1px solid var(--ns-paper-line); border-radius: 2px; display: block;
+}
+.meta-thumb-empty { background: repeating-linear-gradient(135deg, #DCD1C1 0 6px, #D3C7B7 6px 12px); }
+.candidates { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+.candidate {
+  display: flex; align-items: center; gap: 10px; text-align: left;
+  padding: 10px; border: 1px solid var(--ns-paper-line); border-radius: 2px;
+  background: var(--ns-field); color: var(--ns-ink); cursor: pointer;
+}
+.candidate:hover { border-color: var(--ns-primary); }
+.candidate[aria-pressed="true"] { border-color: var(--ns-primary); background: #F4EBE2; }
+.candidate b { font-family: var(--ns-serif); font-size: 15px; font-weight: 400; line-height: 1.35; }
+.candidate span span { font-size: 12px; color: var(--ns-ink-faint); }

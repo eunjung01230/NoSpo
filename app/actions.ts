@@ -14,9 +14,13 @@ import {
   countWarnings,
   createComment,
   createPost,
+  canEditWork,
   createWork,
   deleteOwnComment,
+  deleteWork,
   findWorkByTitle,
+  updateWork,
+  workUsage,
   deleteOwnPost,
   getOwnPost,
   getProgress,
@@ -52,7 +56,7 @@ import {
   type BoardType,
 } from "@/lib/boards";
 import { boardLabelFor, isCategory, isOrigin, usesOrigin } from "@/lib/categories";
-import { lookupArtwork } from "@/lib/artwork-lookup";
+import { resolveCandidate, searchArtwork, type ArtworkCandidate } from "@/lib/artwork-lookup";
 
 /** 시연 사용자 전환. 쿠키에는 서버에서 확인한 사용자 id만 저장한다. */
 export async function switchUserAction(formData: FormData) {
@@ -465,7 +469,11 @@ export async function createWorkAction(
   while (await workExists(id)) id = workIdFrom(title);
 
   // 외부 조회는 실패하거나 느려도 등록을 막지 않는다(빈 메타로 진행).
-  const meta = await lookupArtwork(title, category);
+  const meta = await resolveCandidate(
+    String(formData.get("candidate") ?? ""),
+    title,
+    category
+  );
 
   await createWork({
     id,
@@ -488,4 +496,147 @@ export async function createWorkAction(
   revalidatePath("/", "layout");
   // 등록한 사람이 바로 진도를 정하고 글을 쓸 수 있도록 작품 화면으로 보낸다.
   redirect(`/works/${id}`);
+}
+
+export type CandidateState = {
+  candidates?: ArtworkCandidate[];
+  message?: string;
+};
+
+/** 영화·드라마·애니는 TMDB, 만화·책은 Open Library에서 찾는다(안내 문구 고르는 데만 쓴다). */
+function usesTmdb(category: string) {
+  return category === "movie" || category === "drama" || category === "anime";
+}
+
+/**
+ * 작품 정보 후보 찾기. 제목이 조금 달라도 고를 수 있도록 목록만 돌려주고,
+ * 무엇을 쓸지는 등록·수정하는 사람이 고른다. 찾지 못해도 등록은 막지 않는다.
+ */
+export async function searchArtworkAction(
+  _prev: CandidateState,
+  formData: FormData
+): Promise<CandidateState> {
+  await getCurrentUser();
+  const title = String(formData.get("title") ?? "").trim();
+  const category = String(formData.get("category") ?? "");
+  if (!title) return { message: "먼저 작품명을 입력해 주세요." };
+  if (!isCategory(category)) return { message: "먼저 분야를 선택해 주세요." };
+
+  const candidates = await searchArtwork(title, category);
+  if (candidates.length === 0) {
+    return {
+      candidates: [],
+      message: usesTmdb(category)
+        ? "찾은 작품이 없습니다. 제목을 조금 바꿔 다시 찾거나, 연결하지 않고 등록해도 됩니다."
+        : "찾은 작품이 없습니다. 원제(영문)로 찾으면 나올 때가 있어요.",
+    };
+  }
+  return { candidates };
+}
+
+/**
+ * 작품 수정. 등록한 사람 본인과 관리자만 할 수 있고 권한은 서버에서 다시 확인한다.
+ * 진도 단위는 이미 쓰인 회차·글과 얽혀 있어 바꾸지 않는다. 회차 수는 늘릴 수 있고,
+ * 줄이는 것은 그 뒤 회차에 글이나 진도가 없을 때만 받는다.
+ */
+export async function updateWorkAction(
+  _prev: WorkFormState,
+  formData: FormData
+): Promise<WorkFormState> {
+  const user = await getCurrentUser();
+  const workId = String(formData.get("workId") ?? "");
+  const title = String(formData.get("title") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim();
+  const category = String(formData.get("category") ?? "");
+  const originRaw = String(formData.get("origin") ?? "");
+  const genre = String(formData.get("genre") ?? "").trim();
+  const minutesRaw = String(formData.get("minutes") ?? "").trim();
+
+  const values = {
+    title, description, category, origin: originRaw, genre,
+    stages: String(formData.get("stages") ?? ""), minutes: minutesRaw,
+  };
+  const fail = (error: string) => ({ error, values });
+
+  if (!(await canEditWork(workId, user.id, user.is_admin))) {
+    return fail("내가 등록한 작품만 수정할 수 있습니다.");
+  }
+  const work = await getWork(workId);
+  if (!work) return fail("작품을 찾을 수 없습니다.");
+
+  if (!title) return fail("작품명을 입력해 주세요.");
+  if (title.length > 80) return fail("작품명은 80자까지 쓸 수 있습니다.");
+  if (!description) return fail("한 줄 소개를 입력해 주세요.");
+  if (description.length > 300) {
+    return fail("한 줄 소개는 300자까지 쓸 수 있습니다. 줄거리 전문은 넣지 말아주세요.");
+  }
+  if (!isCategory(category)) return fail("분야를 선택해 주세요.");
+  const origin = usesOrigin(category) ? originRaw : "";
+  if (usesOrigin(category) && !isOrigin(origin)) return fail("국내·외국을 선택해 주세요.");
+
+  const single = work.progress_unit === "single";
+  const stages = single ? 1 : Number(formData.get("stages"));
+  if (!single && (!Number.isInteger(stages) || stages < 1 || stages > 2000)) {
+    return fail("회차 수는 1에서 2000 사이의 숫자로 적어주세요.");
+  }
+  const minutes = minutesRaw ? Number(minutesRaw) : null;
+  if (minutes !== null && (!Number.isInteger(minutes) || minutes < 1 || minutes > 1000)) {
+    return fail("한 회차 감상 시간은 1에서 1000분 사이로 적어주세요.");
+  }
+
+  const usage = await workUsage(workId);
+  if (!single && stages < usage.maxUsedStage) {
+    return fail(
+      `이미 ${usage.maxUsedStage}번째 회차까지 글이나 진도가 있어 그보다 적게 줄일 수 없습니다.`
+    );
+  }
+
+  const duplicate = await findWorkByTitle(title);
+  if (duplicate && duplicate.id !== workId) {
+    return fail(`'${duplicate.title}'은(는) 이미 등록되어 있습니다.`);
+  }
+
+  // 후보를 새로 고른 경우에만 메타를 바꾼다. 고르지 않으면 지금 값을 그대로 둔다.
+  const candidate = String(formData.get("candidate") ?? "");
+  const clearMeta = formData.get("clearMeta") === "1";
+  const meta = candidate
+    ? await resolveCandidate(candidate, title, category)
+    : clearMeta
+      ? { posterUrl: null, year: null, creator: null }
+      : { posterUrl: work.poster_url, year: work.year, creator: work.creator };
+
+  await updateWork({
+    id: workId,
+    title,
+    description,
+    category,
+    origin: origin || null,
+    genre: genre || null,
+    boardLabel: boardLabelFor(category, origin || null),
+    stages,
+    unitSuffix: unitNoun(work.progress_unit),
+    minutesPerStage: minutes,
+    year: meta.year,
+    creator: meta.creator,
+    posterUrl: meta.posterUrl,
+  });
+
+  revalidatePath("/", "layout");
+  redirect(`/works/${workId}`);
+}
+
+/** 작품 삭제. 글이 하나라도 있으면 지우지 않는다(남이 쓴 글이 말없이 사라지지 않도록). */
+export async function deleteWorkAction(formData: FormData) {
+  const user = await getCurrentUser();
+  const workId = String(formData.get("workId") ?? "");
+  if (!(await canEditWork(workId, user.id, user.is_admin))) {
+    throw new Error("내가 등록한 작품만 삭제할 수 있습니다.");
+  }
+  const usage = await workUsage(workId);
+  if (usage.posts > 0) {
+    throw new Error("이 작품에는 이미 글이 있어 삭제할 수 없습니다.");
+  }
+  await deleteWork(workId);
+  revalidatePath("/", "layout");
+  redirect("/");
 }

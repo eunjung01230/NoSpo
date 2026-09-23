@@ -765,3 +765,70 @@ export async function createWork(input: {
     `;
   }
 }
+
+/** 작품 수정·삭제 권한. 등록한 사람 본인과 관리자만이며, 판정은 항상 서버에서 한다. */
+export async function canEditWork(workId: string, userId: string, isAdmin: boolean) {
+  if (isAdmin) return true;
+  const db = sql();
+  const rows = (await db`
+    select 1 from works where id = ${workId} and created_by = ${userId}
+  `) as unknown[];
+  return rows.length > 0;
+}
+
+/** 이 작품에 달린 글 수와, 실제로 쓰이고 있는 가장 뒤 회차. 회차를 줄여도 되는지 판단한다. */
+export async function workUsage(workId: string): Promise<{ posts: number; maxUsedStage: number }> {
+  const db = sql();
+  const rows = (await db`
+    select (select count(*)::int from posts p where p.work_id = ${workId}) as posts,
+           greatest(
+             coalesce((select max(max_stage) from posts p where p.work_id = ${workId}), 0),
+             coalesce((select max(stage_no) from user_progress up where up.work_id = ${workId}), 0)
+           ) as max_used_stage
+  `) as { posts: number; max_used_stage: number }[];
+  return { posts: rows[0]?.posts ?? 0, maxUsedStage: rows[0]?.max_used_stage ?? 0 };
+}
+
+/**
+ * 작품 수정. 진도 단위는 회차·글과 얽혀 있어 여기서 바꾸지 않고, 회차 수만 조정한다.
+ * 회차를 늘리면 뒤에 단계를 더 만들고, 줄이면 쓰이지 않는 뒤 단계만 지운다
+ * (쓰이는 회차가 남아 있으면 호출하는 쪽에서 미리 막는다).
+ */
+export async function updateWork(input: {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  origin: string | null;
+  genre: string | null;
+  boardLabel: string;
+  stages: number;
+  unitSuffix: string;
+  minutesPerStage: number | null;
+  year: string | null;
+  creator: string | null;
+  posterUrl: string | null;
+}) {
+  const db = sql();
+  await db`
+    update works set title = ${input.title}, description = ${input.description},
+                     category = ${input.category}, origin = ${input.origin},
+                     genre = ${input.genre}, board = ${input.boardLabel},
+                     minutes_per_stage = ${input.minutesPerStage},
+                     year = ${input.year}, creator = ${input.creator},
+                     poster_url = ${input.posterUrl}
+    where id = ${input.id}
+  `;
+  await db`
+    insert into work_stages (work_id, stage_no, label)
+    select ${input.id}, i, i || ${input.unitSuffix} from generate_series(1, ${input.stages}) as i
+    on conflict (work_id, stage_no) do nothing
+  `;
+  await db`delete from work_stages where work_id = ${input.id} and stage_no > ${input.stages}`;
+}
+
+/** 작품 삭제. 글이 하나라도 있으면 호출하는 쪽에서 막는다(글을 말없이 지우지 않기 위해). */
+export async function deleteWork(workId: string) {
+  const db = sql();
+  await db`delete from works where id = ${workId}`;
+}

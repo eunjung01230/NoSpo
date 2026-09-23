@@ -1,5 +1,5 @@
 import Link from "next/link";
-import NewWorkForm from "./NewWorkForm";
+import WorkForm from "../WorkForm";
 import { getCurrentUser } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -38,7 +38,7 @@ export default async function NewWorkPage({
           </span>
         </div>
 
-        <NewWorkForm initialTitle={(title ?? "").trim()} />
+        <WorkForm initialTitle={(title ?? "").trim()} />
       </div>
     </section>
   );

@@ -1,5 +1,5 @@
 import { setProgressAction } from "@/app/actions";
-import { unitNoun } from "@/lib/boards";
+import { progressSentence, unitNoun } from "@/lib/boards";
 import type { Stage, Work } from "@/lib/types";
 
 /**
@@ -18,8 +18,8 @@ export default function ProgressPanel({
   userLabel: string;
 }) {
   const unit = unitNoun(work.progress_unit);
-  const currentLabel =
-    stages.find((s) => s.stage_no === progress)?.label ?? "시작 전";
+  const currentStage = stages.find((s) => s.stage_no === progress) ?? null;
+  const currentLabel = currentStage?.label ?? "시작 전";
   // 단계가 많은 작품은 30칸으로 압축해 보여준다(표시 전용).
   const segmentCount = Math.min(stages.length, 30);
   const filled = stages.length
@@ -27,7 +27,7 @@ export default function ProgressPanel({
     : 0;
 
   return (
-    <div className="panel stack" style={{ flex: "0 1 380px", gap: 14 }}>
+    <div className="panel stack" style={{ gap: 14 }}>
       <div className="stack" style={{ gap: 4 }}>
         <span style={{ fontSize: 12.5, color: "var(--ns-muted)" }}>내 진도</span>
         <span className="progress-value">
@@ -49,8 +49,11 @@ export default function ProgressPanel({
       </div>
 
       <span style={{ fontSize: 13, lineHeight: 1.6, color: "#E0D5C7" }}>
-        {userLabel}님은 <b style={{ fontWeight: 600 }}>{currentLabel}</b>까지 봤습니다.
-        이 진도까지의 글만 열립니다.
+        {userLabel}님은{" "}
+        <b style={{ fontWeight: 600 }}>
+          {progressSentence(work.progress_unit, currentStage?.label ?? null)}
+        </b>
+        . 이 진도까지의 글만 열립니다.
       </span>
 
       <form

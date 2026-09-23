@@ -1,12 +1,12 @@
 import { sql } from "./db";
 import type { BoardType } from "./boards";
-import type { Stage, VisiblePost, Work } from "./types";
+import type { Comment, Stage, VisiblePost, Work } from "./types";
 
 export async function listWorks(): Promise<Work[]> {
   const db = sql();
   return (await db`
     select id, board, title, description, progress_unit, category, origin, genre,
-           poster_url, year, creator
+           poster_url, year, creator, minutes_per_stage
     from works
     order by title
   `) as Work[];
@@ -16,7 +16,7 @@ export async function getWork(workId: string): Promise<Work | null> {
   const db = sql();
   const rows = (await db`
     select id, board, title, description, progress_unit, category, origin, genre,
-           poster_url, year, creator
+           poster_url, year, creator, minutes_per_stage
     from works where id = ${workId}
   `) as Work[];
   return rows[0] ?? null;
@@ -66,10 +66,11 @@ export async function listVisiblePosts(
   return (await db`
     select p.id, p.work_id, p.board_type, p.author_id, u.display_name as author_name,
            p.title, p.body, p.max_stage, s.label as stage_label, p.is_demo_seed,
+           (select count(*)::int from comments c where c.post_id = p.id) as comment_count,
            to_char(p.created_at, 'YYYY-MM-DD HH24:MI') as created_at
     from posts p
       join users u on u.id = p.author_id
-      join work_stages s on s.work_id = p.work_id and s.stage_no = p.max_stage
+      left join work_stages s on s.work_id = p.work_id and s.stage_no = p.max_stage
     where p.work_id = ${workId}
       and p.board_type = ${boardType}
       and p.max_stage <= ${progress}
@@ -108,10 +109,11 @@ export async function getVisiblePost(
   const rows = (await db`
     select p.id, p.work_id, p.board_type, p.author_id, u.display_name as author_name,
            p.title, p.body, p.max_stage, s.label as stage_label, p.is_demo_seed,
+           (select count(*)::int from comments c where c.post_id = p.id) as comment_count,
            to_char(p.created_at, 'YYYY-MM-DD HH24:MI') as created_at
     from posts p
       join users u on u.id = p.author_id
-      join work_stages s on s.work_id = p.work_id and s.stage_no = p.max_stage
+      left join work_stages s on s.work_id = p.work_id and s.stage_no = p.max_stage
     where p.id = ${postId} and p.work_id = ${workId} and p.max_stage <= ${progress}
   `) as VisiblePost[];
   return rows[0] ?? null;
@@ -196,6 +198,7 @@ export async function listWorkCards(
   return (await db`
     select w.id, w.board, w.title, w.description, w.progress_unit,
            w.category, w.origin, w.genre, w.poster_url, w.year, w.creator,
+           w.minutes_per_stage,
            (select count(*)::int from work_stages s where s.work_id = w.id) as total_stages,
            coalesce(up.stage_no, 0) as progress,
            (select s.label from work_stages s
@@ -277,6 +280,130 @@ export async function countPostsBetween(
   const rows = (await db`
     select count(*)::int as c from posts
     where work_id = ${workId} and max_stage > ${lo} and max_stage <= ${hi}
+  `) as { c: number }[];
+  return rows[0]?.c ?? 0;
+}
+
+/**
+ * 댓글 조회. 댓글은 글에 딸린 것이므로 권한도 글과 같다 —
+ * 지금 그 글이 공개되지 않으면 댓글도 한 줄도 내려보내지 않는다.
+ */
+export async function listComments(
+  userId: string,
+  workId: string,
+  postId: string
+): Promise<Comment[] | null> {
+  const post = await getVisiblePost(userId, workId, postId);
+  if (!post) return null;
+  const db = sql();
+  return (await db`
+    select c.id, c.post_id, c.author_id, u.display_name as author_name, c.body,
+           c.is_demo_seed,
+           to_char(c.created_at, 'YYYY-MM-DD HH24:MI') as created_at
+    from comments c
+      join users u on u.id = c.author_id
+    where c.post_id = ${postId}
+    order by c.created_at
+  `) as Comment[];
+}
+
+export async function createComment(input: {
+  postId: string;
+  authorId: string;
+  body: string;
+}) {
+  const db = sql();
+  await db`
+    insert into comments (post_id, author_id, body, is_demo_seed)
+    values (${input.postId}, ${input.authorId}, ${input.body}, false)
+  `;
+}
+
+/** 댓글 삭제도 소유권을 SQL 조건으로 강제한다. 0행이면 권한 없음이다. */
+export async function deleteOwnComment(
+  commentId: string,
+  postId: string,
+  authorId: string
+): Promise<boolean> {
+  const db = sql();
+  const rows = (await db`
+    delete from comments
+    where id = ${commentId} and post_id = ${postId} and author_id = ${authorId}
+    returning id
+  `) as { id: string }[];
+  return rows.length > 0;
+}
+
+export type Recommendation = Work & {
+  total_stages: number;
+  progress: number;
+  /** 처음부터 끝까지 보는 데 드는 시간(분). minutes_per_stage가 없으면 0. */
+  total_minutes: number;
+  /** 지금 지점부터 끝까지 남은 시간(분). 시간 대비로 고를 때 쓰는 값이다. */
+  left_minutes: number;
+  genre_match: boolean;
+  category_match: boolean;
+};
+
+/**
+ * 내가 글을 쓴 작품들의 분야·장르를 모아, 아직 다 보지 않은 작품을 권한다.
+ * 글의 내용은 읽지 않고 어느 작품에 썼는지만 본다(공개 판정과 무관한 작품 메타 추천).
+ * 같은 장르 → 같은 분야 → 아직 시작하지 않은 것 → 남은 시간이 적은 것 순이다.
+ */
+export async function recommendWorks(
+  userId: string,
+  limit = 4
+): Promise<Recommendation[]> {
+  const db = sql();
+  return (await db`
+    with mine as (
+      select distinct w.category, w.genre
+      from posts p join works w on w.id = p.work_id
+      where p.author_id = ${userId}
+    ),
+    base as (
+      select w.*,
+             (select count(*)::int from work_stages s where s.work_id = w.id) as total_stages,
+             coalesce(up.stage_no, 0) as progress
+      from works w
+        left join user_progress up on up.work_id = w.id and up.user_id = ${userId}
+    )
+    select b.id, b.board, b.title, b.description, b.progress_unit,
+           b.category, b.origin, b.genre, b.poster_url, b.year, b.creator,
+           b.minutes_per_stage, b.total_stages, b.progress,
+           coalesce(b.minutes_per_stage, 0) * b.total_stages as total_minutes,
+           coalesce(b.minutes_per_stage, 0) * (b.total_stages - b.progress) as left_minutes,
+           exists (select 1 from mine m where m.genre is not null and m.genre = b.genre)
+             as genre_match,
+           exists (select 1 from mine m where m.category is not null and m.category = b.category)
+             as category_match
+    from base b
+    where b.progress < b.total_stages
+    order by genre_match desc, category_match desc, (b.progress = 0) desc,
+             left_minutes asc, b.title
+    limit ${limit}
+  `) as Recommendation[];
+}
+
+/** 추천 이유 한 줄. 화면 문구를 한 곳에서만 만든다. */
+export function recommendReason(r: Recommendation) {
+  const started = r.progress > 0;
+  if (r.genre_match && r.genre) {
+    return started
+      ? `내가 글을 남긴 ${r.genre} 작품 · 이어보기`
+      : `내가 글을 남긴 ${r.genre} 작품과 같은 장르`;
+  }
+  if (r.category_match) {
+    return started ? "내가 글을 남긴 분야 · 이어보기" : "내가 글을 남긴 분야의 새 작품";
+  }
+  return started ? "이어보기" : "시간이 적게 드는 것부터";
+}
+
+/** 추천 문구를 고르기 위한 값. 내가 쓴 글의 개수만 센다. */
+export async function countMyPosts(userId: string): Promise<number> {
+  const db = sql();
+  const rows = (await db`
+    select count(*)::int as c from posts where author_id = ${userId}
   `) as { c: number }[];
   return rows[0]?.c ?? 0;
 }

@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { unitNoun } from "@/lib/boards";
+import { progressSummary, unitNoun } from "@/lib/boards";
+import { formatMinutes, timeBudget } from "@/lib/runtime";
 import type { WorkCard } from "@/lib/data";
 import Poster from "./Poster";
 
@@ -18,10 +19,11 @@ export default function WorkGrid({ works }: { works: WorkCard[] }) {
         const pct = w.total_stages
           ? Math.round((w.progress / w.total_stages) * 100)
           : 0;
-        const progressLabel =
-          w.progress === 0
-            ? "아직 보지 않음"
-            : `${w.progress_label ?? `${w.progress}${unit}`}까지`;
+        const t = timeBudget(w.minutes_per_stage, w.total_stages, w.progress);
+        const progressLabel = progressSummary(
+          w.progress_unit,
+          w.progress === 0 ? null : (w.progress_label ?? `${w.progress}${unit}`)
+        );
         return (
           <Link key={w.id} href={`/works/${w.id}`} className="work-card">
             <Poster workId={w.id} posterUrl={w.poster_url} title={w.title} />
@@ -30,6 +32,14 @@ export default function WorkGrid({ works }: { works: WorkCard[] }) {
                 <span style={{ color: "var(--ns-rose)" }}>{w.board}</span>
                 <span style={{ color: "#6E6259" }}>·</span>
                 <span style={{ color: "var(--ns-muted-dim)" }}>{length}</span>
+                {t.known && (
+                  <>
+                    <span style={{ color: "#6E6259" }}>·</span>
+                    <span style={{ color: "var(--ns-muted-dim)" }}>
+                      {formatMinutes(t.total)}
+                    </span>
+                  </>
+                )}
                 {w.year && (
                   <>
                     <span style={{ color: "#6E6259" }}>·</span>
@@ -51,6 +61,7 @@ export default function WorkGrid({ works }: { works: WorkCard[] }) {
                 }}
               >
                 {progressLabel}
+                {t.known && t.left > 0 && ` · 남은 시간 ${formatMinutes(t.left)}`}
               </span>
             </div>
           </Link>

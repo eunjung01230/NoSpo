@@ -7,7 +7,9 @@ import {
   BOARD_DESCRIPTIONS,
   BOARD_LABELS,
   boardPath,
+  isUngated,
   slugToBoard,
+  progressSummary,
   stageQuestion,
   unitNoun,
 } from "@/lib/boards";
@@ -34,8 +36,7 @@ export default async function NewPostPage({
   ]);
   // 작성자의 전체 진도가 아니라 '글에 포함된 마지막 회차'를 고르는 자리다.
   const selectable = stages.filter((s) => s.stage_no <= progress);
-  const currentLabel =
-    stages.find((s) => s.stage_no === progress)?.label ?? "시작 전";
+  const currentStage = stages.find((s) => s.stage_no === progress) ?? null;
 
   return (
     <section
@@ -55,11 +56,14 @@ export default async function NewPostPage({
             {BOARD_DESCRIPTIONS[boardType]}
           </span>
           <span style={{ fontSize: 14, lineHeight: 1.6, color: "var(--ns-ink-muted)" }}>
-            {work.title} · 작성자 {user.display_name}(시연 사용자) · 현재 진도 {currentLabel}
+            {work.title} · 작성자 {user.display_name}(시연 사용자)
+            {isUngated(boardType)
+              ? " · 진도 제한 없는 게시판"
+              : ` · 현재 진도 ${progressSummary(work.progress_unit, currentStage?.label ?? null)}`}
           </span>
         </div>
 
-        {selectable.length === 0 ? (
+        {selectable.length === 0 && !isUngated(boardType) ? (
           <p className="form-error">
             아직 진도가 없어 글을 쓸 수 없습니다. 작품 화면에서 진도를 먼저 올려주세요.
           </p>

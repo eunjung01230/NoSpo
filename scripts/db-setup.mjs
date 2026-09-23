@@ -54,9 +54,26 @@ await db`create table if not exists posts (
 await db`alter table posts add column if not exists board_type text not null default 'review'`;
 await db`alter table posts drop constraint if exists posts_board_type_check`;
 await db`alter table posts add constraint posts_board_type_check
-  check (board_type in ('review','question','interpretation','recap'))`;
+  check (board_type in ('review','question','interpretation','recap','free'))`;
 await db`create index if not exists posts_work_board_stage_idx
   on posts (work_id, board_type, max_stage)`;
+
+// 자유 게시판 글은 max_stage = 0으로 저장한다. 회차가 없는 글이므로 work_stages와
+// 이어지지 않으며, 공개 조건(max_stage <= 진도)은 그대로 통과한다.
+await db`alter table posts drop constraint if exists posts_max_stage_check`;
+await db`alter table posts add constraint posts_max_stage_check check (max_stage >= 0)`;
+
+// 댓글. 글에 딸린 소통 수단이라 글이 지워지면 함께 사라진다.
+// 읽기·쓰기 권한은 언제나 '그 글이 지금 공개되는가'로 서버에서 다시 판정한다.
+await db`create table if not exists comments (
+  id uuid primary key default gen_random_uuid(),
+  post_id uuid not null references posts(id) on delete cascade,
+  author_id text not null references users(id) on delete cascade,
+  body text not null,
+  is_demo_seed boolean not null default false,
+  created_at timestamptz not null default now()
+)`;
+await db`create index if not exists comments_post_idx on comments (post_id, created_at)`;
 
 // 분야(영화/드라마/애니/만화/책) · 국내외 구분 · 장르는 works를 확장해서 담는다.
 await db`alter table works add column if not exists category text`;
@@ -65,6 +82,8 @@ await db`alter table works add column if not exists genre text`;
 await db`alter table works add column if not exists poster_url text`;
 await db`alter table works add column if not exists year text`;
 await db`alter table works add column if not exists creator text`;
+// 감상에 걸리는 시간(한 회차·편·권 평균 분). 러닝타임과 평균 분량만 담는 표시용 값이다.
+await db`alter table works add column if not exists minutes_per_stage int`;
 await db`create index if not exists works_category_idx on works (category, origin, genre)`;
 
 await db`insert into users (id, display_name) values
@@ -78,70 +97,70 @@ const works = [
     id: "squid-game-s1", category: "drama", origin: "domestic", genre: "스릴러", board: "드라마(국내)", title: "오징어 게임 시즌 1",
     description: "빚에 몰린 사람들이 거액의 상금이 걸린 의문의 게임에 초대되는 한국 서바이벌 드라마. 시즌 1은 전 9화이며 황동혁이 각본과 연출을 맡았습니다.",
     year: "2021", creator: "황동혁 연출 · 넷플릭스",
-    unit: "episode", stages: 9, suffix: "화",
+    unit: "episode", stages: 9, suffix: "화", minutes: 60,
     progress: { "user-a": 3, "user-b": 8 },
   },
   {
     id: "stranger-things-s1", category: "drama", origin: "foreign", genre: "SF", board: "드라마(외국)", title: "기묘한 이야기 시즌 1",
     description: "1980년대 미국의 작은 마을에서 한 소년이 사라지며 시작되는 미스터리 드라마. 시즌 1은 전 8화이고 시대극 감성에 SF·호러가 섞여 있습니다.",
     year: "2016", creator: "더퍼 형제 · 넷플릭스",
-    unit: "episode", stages: 8, suffix: "화",
+    unit: "episode", stages: 8, suffix: "화", minutes: 50,
     progress: { "user-a": 2, "user-b": 6 },
   },
   {
     id: "attack-on-titan-s1", category: "anime", origin: null, genre: "액션", board: "애니", title: "진격의 거인 시즌 1",
     description: "거인의 위협 속에서 벽 안에 살아가는 인류를 그린 일본 애니메이션. 시즌 1은 전 25화이며 같은 원작의 만화와는 진도를 따로 관리합니다.",
     year: "2013", creator: "이사야마 하지메 원작 · WIT STUDIO",
-    unit: "episode", stages: 25, suffix: "화",
+    unit: "episode", stages: 25, suffix: "화", minutes: 24,
     progress: { "user-a": 5, "user-b": 18 },
   },
   {
     id: "one-piece-manga", category: "comic", origin: null, genre: "모험", board: "만화", title: "원피스 (만화책)",
     description: "해적왕을 꿈꾸는 소년과 동료들의 대항해를 그린 장편 만화. 연재가 이어지고 있어 진도는 몇 권까지 읽었는지로 기록합니다.",
     year: "1997~", creator: "오다 에이이치로 · 주간 소년 점프",
-    unit: "volume", stages: 110, suffix: "권",
+    unit: "volume", stages: 110, suffix: "권", minutes: 40,
     progress: { "user-a": 12, "user-b": 60 },
   },
   {
     id: "solo-leveling-webtoon", category: "comic", origin: null, genre: "액션", board: "만화", title: "나 혼자만 레벨업 (웹툰)",
     description: "게이트와 헌터가 등장하는 세계에서 가장 약한 헌터가 성장하는 한국 웹툰. 진도는 몇 화까지 읽었는지로 기록합니다.",
     year: "2018", creator: "추공 원작 · 장성락 작화 · 카카오페이지",
-    unit: "episode", stages: 179, suffix: "화",
+    unit: "episode", stages: 179, suffix: "화", minutes: 8,
     progress: { "user-a": 20, "user-b": 95 },
   },
   {
     id: "harry-potter-novels", category: "book", origin: null, genre: "판타지", board: "책", title: "해리 포터 시리즈 (소설)",
     description: "마법 학교 호그와트를 배경으로 한 판타지 소설 시리즈. 전 7권이며 진도는 몇 권까지 읽었는지로 기록합니다.",
     year: "1997~2007", creator: "J. K. 롤링",
-    unit: "volume", stages: 7, suffix: "권",
+    unit: "volume", stages: 7, suffix: "권", minutes: 540,
     progress: { "user-a": 2, "user-b": 5 },
   },
   {
     id: "mcu-infinity-saga", category: "movie", origin: "foreign", genre: "히어로", board: "영화(외국)", title: "마블 시네마틱 유니버스: 인피니티 사가",
     description: "여러 히어로 영화가 하나의 세계관으로 이어지는 미국 프랜차이즈. 인피니티 사가는 개봉 순 23편이며 진도는 몇 편까지 봤는지로 기록합니다.",
     year: "2008~2019", creator: "마블 스튜디오",
-    unit: "film", stages: 23, suffix: "편",
+    unit: "film", stages: 23, suffix: "편", minutes: 130,
     progress: { "user-a": 6, "user-b": 15 },
   },
   {
     id: "dark-knight-trilogy", category: "movie", origin: "foreign", genre: "범죄", board: "영화(외국)", title: "다크 나이트 3부작",
     description: "한 도시의 자경단 히어로를 현실적인 톤으로 그린 영화 3부작. 진도는 몇 편까지 봤는지로 기록합니다.",
     year: "2005~2012", creator: "크리스토퍼 놀런 감독",
-    unit: "film", stages: 3, suffix: "편",
+    unit: "film", stages: 3, suffix: "편", minutes: 145,
     progress: { "user-a": 1, "user-b": 3 },
   },
   {
     id: "interstellar", category: "movie", origin: "foreign", genre: "SF", board: "영화(외국)", title: "인터스텔라",
     description: "황폐해진 지구를 떠나 새로운 터전을 찾아 나서는 우주 탐사 영화. 169분 단일 작품이라 봤는지 여부만 기록합니다.",
     year: "2014", creator: "크리스토퍼 놀런 감독",
-    unit: "single", stages: 1, suffix: "", singleLabel: "봤다",
+    unit: "single", stages: 1, suffix: "", minutes: 169, singleLabel: "봤다",
     progress: { "user-a": 0, "user-b": 1 },
   },
   {
     id: "parasite", category: "movie", origin: "domestic", genre: "스릴러", board: "영화(국내)", title: "기생충",
     description: "두 가족이 얽히며 벌어지는 일을 그린 한국 영화. 132분 단일 작품이라 봤는지 여부만 기록합니다.",
     year: "2019", creator: "봉준호 감독",
-    unit: "single", stages: 1, suffix: "", singleLabel: "봤다",
+    unit: "single", stages: 1, suffix: "", minutes: 132, singleLabel: "봤다",
     progress: { "user-a": 1, "user-b": 0 },
   },
 ];
@@ -161,14 +180,15 @@ for (const oldId of ["frieren-s1", "lotr-trilogy"]) {
 
 for (const w of works) {
   await db`insert into works (id, board, title, description, progress_unit,
-                             category, origin, genre, year, creator, poster_url)
+                             category, origin, genre, year, creator, poster_url, minutes_per_stage)
     values (${w.id}, ${w.board}, ${w.title}, ${w.description}, ${w.unit},
             ${w.category}, ${w.origin}, ${w.genre}, ${w.year ?? null},
-            ${w.creator ?? null}, ${w.poster ?? null})
+            ${w.creator ?? null}, ${w.poster ?? null}, ${w.minutes ?? null})
     on conflict (id) do update set board = excluded.board, title = excluded.title,
       description = excluded.description, progress_unit = excluded.progress_unit,
       category = excluded.category, origin = excluded.origin, genre = excluded.genre,
       year = excluded.year, creator = excluded.creator,
+      minutes_per_stage = excluded.minutes_per_stage,
       -- 포스터는 별도 스크립트(npm run posters)로 채우므로 기존 값을 지우지 않는다.
       poster_url = coalesce(excluded.poster_url, works.poster_url)`;
   if (w.singleLabel) {
@@ -321,6 +341,47 @@ const seeds = [
 for (const [id, workId, board, author, stage, title, body] of seeds) {
   await db`insert into posts (id, work_id, board_type, author_id, title, body, max_stage, is_demo_seed)
     values (${id}, ${workId}, ${board}, ${author}, ${title}, ${body}, ${stage}, true)
+    on conflict (id) do nothing`;
+}
+
+// 자유 게시판 시연 글. 진도 제한이 없으므로 max_stage는 0으로 넣고,
+// 작품의 전개·결말을 적지 않은 잡담만 담는다.
+const freeSeeds = [
+  ["f0000000-0000-4000-8000-000000000001", "squid-game-s1", "user-a",
+   "다들 몇 화씩 끊어서 보시나요",
+   "진도 제한이 없는 방이라 편하게 물어봅니다. 저는 하루 한 화씩 보는 중인데, 몰아보는 분들도 많더라고요."],
+  ["f0000000-0000-4000-8000-000000000002", "attack-on-titan-s1", "user-b",
+   "아직 시작 전인 분들께",
+   "작품 내용은 적지 않을게요. 한 화가 짧은 편이라 생각보다 진도가 빨리 나갑니다."],
+  ["f0000000-0000-4000-8000-000000000003", "one-piece-manga", "user-a",
+   "종이책과 전자책 중에 어떤 쪽으로 보세요",
+   "권수가 많아서 보관이 고민입니다. 내용 이야기 없이 읽는 방법만 여쭤봐요."],
+  ["f0000000-0000-4000-8000-000000000004", "interstellar", "user-a",
+   "아직 안 본 사람도 들어올 수 있는 방",
+   "이 게시판은 진도와 상관없이 열려 있어서, 작품 이야기 대신 언제 볼지 같은 잡담을 남겨요."],
+];
+
+for (const [id, workId, author, title, body] of freeSeeds) {
+  await db`insert into posts (id, work_id, board_type, author_id, title, body, max_stage, is_demo_seed)
+    values (${id}, ${workId}, 'free', ${author}, ${title}, ${body}, 0, true)
+    on conflict (id) do nothing`;
+}
+
+// 시연 댓글. 댓글은 그 글이 지금 공개되는 사람에게만 보인다(판정은 조회할 때 서버에서 한다).
+const commentSeeds = [
+  ["c0000000-0000-4000-8000-000000000001", "11111111-1111-4111-8111-000000000003", "user-b",
+   "같은 3화까지 본 입장에서 공감합니다. 인물 소개가 부담스럽지 않게 들어와서 좋았어요."],
+  ["c0000000-0000-4000-8000-000000000002", "11111111-1111-4111-8111-000000000303", "user-b",
+   "저도 이 구간까지는 편하게 봤습니다. 뒤 이야기는 여기서 말고 다른 글에서 이어가요."],
+  ["c0000000-0000-4000-8000-000000000003", "cccccccc-cccc-4ccc-8ccc-000000000002", "user-a",
+   "공간의 높낮이 이야기 잘 봤습니다. 다시 볼 때 그 부분을 눈여겨보려고요."],
+  ["c0000000-0000-4000-8000-000000000004", "f0000000-0000-4000-8000-000000000001", "user-b",
+   "저는 두 화씩 끊어 봅니다. 자유 게시판이라 진도 상관없이 이야기할 수 있어 좋네요."],
+];
+
+for (const [id, postId, author, body] of commentSeeds) {
+  await db`insert into comments (id, post_id, author_id, body, is_demo_seed)
+    values (${id}, ${postId}, ${author}, ${body}, true)
     on conflict (id) do nothing`;
 }
 

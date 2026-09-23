@@ -378,3 +378,74 @@ textarea.field { min-height: 300px; resize: vertical; line-height: 1.85; }
   .wordmark .tagline { display: none; }
   .wordmark .rule { display: none; }
 }
+
+/* ---------- 감상 시간 ---------- */
+.time-panel {
+  background: var(--ns-panel); border: 1px solid var(--ns-line); border-radius: 4px;
+  padding: 18px 20px; display: flex; flex-direction: column; gap: 8px;
+}
+.time-panel .cap {
+  font-family: var(--ns-mono); font-size: 11px; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--ns-muted-dim);
+}
+.time-panel .lead { font-family: var(--ns-serif); font-size: 27px; line-height: 1.2; color: var(--ns-rose); }
+.time-panel .note { font-size: 12.5px; line-height: 1.6; color: var(--ns-muted); }
+.time-rows { display: flex; gap: 28px; margin: 4px 0 0; }
+.time-rows div { display: flex; flex-direction: column; gap: 2px; }
+.time-rows dt { font-size: 11.5px; color: var(--ns-muted-dim); }
+.time-rows dd {
+  margin: 0; font-family: var(--ns-mono); font-size: 14px; color: var(--ns-text-dim);
+}
+.time-rows dd.left { color: var(--ns-rose); }
+
+/* ---------- 다음에 볼 것 추천 ---------- */
+.rec-row {
+  display: grid; gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+}
+.rec-card {
+  display: flex; gap: 14px; align-items: flex-start;
+  border: 1px solid var(--ns-line-soft); border-radius: 4px; padding: 14px;
+  background: var(--ns-surface-low);
+}
+.rec-card:hover { background: var(--ns-panel); border-color: var(--ns-line); color: inherit; }
+.rec-card .why { font-size: 11.5px; line-height: 1.5; color: var(--ns-rose); }
+.rec-card .title {
+  font-family: var(--ns-serif); font-size: 17px; line-height: 1.35; color: var(--ns-text);
+}
+.rec-card .meta { font-family: var(--ns-mono); font-size: 11px; color: var(--ns-muted-dim); }
+
+/* ---------- 자유 게시판 행 ---------- */
+.post-row-free { grid-template-columns: 62px minmax(0, 1fr); gap: 16px; }
+.post-row-free .open {
+  font-size: 11.5px; color: var(--ns-primary); border: 1px solid #C4A69C;
+  border-radius: 2px; padding: 2px 0; text-align: center; margin-top: 4px;
+}
+
+/* ---------- 댓글 ---------- */
+.cmt { font-family: var(--ns-mono); font-size: 11px; color: var(--ns-primary); }
+.comments { padding: clamp(20px, 5%, 32px); display: flex; flex-direction: column; gap: 16px; }
+.comments-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 10px; }
+.comments-head h2 { margin: 0; font-size: 21px; color: var(--ns-ink); }
+.comments-head .mono { color: var(--ns-primary); }
+.comments-head .desc { font-size: 12.5px; color: var(--ns-ink-faint); }
+.comment-empty { margin: 0; font-size: 14px; color: var(--ns-ink-muted); }
+.comment-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.comment {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 14px 0; border-top: 1px solid var(--ns-paper-line);
+}
+.comment .who {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  font-size: 12.5px; color: var(--ns-ink-muted);
+}
+.comment .who .name { color: var(--ns-ink); }
+.comment .body {
+  margin: 0; font-size: 14.5px; line-height: 1.8; color: var(--ns-ink-dim);
+  white-space: pre-wrap;
+}
+.comment-form {
+  display: flex; flex-direction: column; gap: 10px;
+  border-top: 1px solid var(--ns-paper-line); padding-top: 16px;
+}
+.comment-form .field { min-height: 92px; }

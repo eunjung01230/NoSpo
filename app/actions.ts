@@ -5,15 +5,26 @@ import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { DEMO_USER_COOKIE, getCurrentUser, listDemoUsers } from "@/lib/session";
 import {
+  createComment,
   createPost,
+  deleteOwnComment,
   deleteOwnPost,
   getOwnPost,
   getProgress,
+  getVisiblePost,
   listStages,
   setProgress,
   updateOwnPost,
 } from "@/lib/data";
-import { boardPath, toBoardType } from "@/lib/boards";
+import {
+  BOARD_COMMENTS,
+  BOARD_LABELS,
+  FREE_STAGE,
+  boardPath,
+  isUngated,
+  toBoardType,
+  type BoardType,
+} from "@/lib/boards";
 
 /** 시연 사용자 전환. 쿠키에는 서버에서 확인한 사용자 id만 저장한다. */
 export async function switchUserAction(formData: FormData) {
@@ -55,16 +66,26 @@ export async function setProgressAction(formData: FormData) {
 
 export type PostFormState = { error?: string };
 
-/** 작성·수정 공통 검증: 빈 제목·본문, 없는 회차, 내 진도 초과를 서버에서 막는다. */
+/**
+ * 작성·수정 공통 검증: 빈 제목·본문, 없는 회차, 내 진도 초과를 서버에서 막는다.
+ * 자유 게시판은 회차가 없는 게시판이라 max_stage를 0으로만 받는다. 0은 어떤 진도보다도
+ * 작거나 같으므로 `max_stage <= 진도`라는 공개 조건을 건드리지 않고 모두에게 열린다.
+ */
 async function validate(
   userId: string,
   workId: string,
+  boardType: BoardType,
   title: string,
   body: string,
   maxStage: number
 ) {
   if (!title) return "제목을 입력해 주세요.";
   if (!body) return "본문을 입력해 주세요.";
+  if (isUngated(boardType)) {
+    return maxStage === FREE_STAGE
+      ? null
+      : "자유 게시판 글에는 회차를 지정하지 않습니다.";
+  }
   const stages = await listStages(workId);
   if (!Number.isInteger(maxStage) || !stages.some((s) => s.stage_no === maxStage)) {
     return "작품에 존재하지 않는 회차입니다.";
@@ -76,6 +97,11 @@ async function validate(
   return null;
 }
 
+/** 폼이 보낸 회차 값. 자유 게시판이면 클라이언트 값과 무관하게 0으로 고정한다. */
+function stageFromForm(boardType: BoardType, formData: FormData) {
+  return isUngated(boardType) ? FREE_STAGE : Number(formData.get("maxStage"));
+}
+
 export async function createPostAction(
   _prev: PostFormState,
   formData: FormData
@@ -85,9 +111,9 @@ export async function createPostAction(
   const boardType = toBoardType(formData.get("boardType"));
   const title = String(formData.get("title") ?? "").trim();
   const body = String(formData.get("body") ?? "").trim();
-  const maxStage = Number(formData.get("maxStage"));
+  const maxStage = stageFromForm(boardType, formData);
 
-  const error = await validate(user.id, workId, title, body, maxStage);
+  const error = await validate(user.id, workId, boardType, title, body, maxStage);
   if (error) return { error };
 
   await createPost({ workId, boardType, authorId: user.id, title, body, maxStage });
@@ -103,11 +129,12 @@ export async function updatePostAction(
   const user = await getCurrentUser();
   const workId = String(formData.get("workId") ?? "");
   const postId = String(formData.get("postId") ?? "");
+  const boardType = toBoardType(formData.get("boardType"));
   const title = String(formData.get("title") ?? "").trim();
   const body = String(formData.get("body") ?? "").trim();
-  const maxStage = Number(formData.get("maxStage"));
+  const maxStage = stageFromForm(boardType, formData);
 
-  const error = await validate(user.id, workId, title, body, maxStage);
+  const error = await validate(user.id, workId, boardType, title, body, maxStage);
   if (error) return { error };
 
   const own = await getOwnPost(user.id, workId, postId);
@@ -133,4 +160,50 @@ export async function deletePostAction(formData: FormData) {
 
   revalidatePath(`/works/${workId}`);
   redirect(boardPath(workId, boardType));
+}
+
+export type CommentFormState = { error?: string };
+
+/**
+ * 댓글 작성. 댓글을 달 권한은 '그 글이 지금 나에게 공개되는가'와 같다.
+ * 글이 잠겨 있으면 글 내용을 받지 못하듯 댓글도 남길 수 없다.
+ */
+export async function createCommentAction(
+  _prev: CommentFormState,
+  formData: FormData
+): Promise<CommentFormState> {
+  const user = await getCurrentUser();
+  const workId = String(formData.get("workId") ?? "");
+  const postId = String(formData.get("postId") ?? "");
+  const body = String(formData.get("body") ?? "").trim();
+
+  if (!body) return { error: "댓글 내용을 입력해 주세요." };
+  if (body.length > 1000) return { error: "댓글은 1000자까지 쓸 수 있습니다." };
+
+  const post = await getVisiblePost(user.id, workId, postId);
+  if (!post) return { error: "지금 읽을 수 없는 글에는 댓글을 남길 수 없습니다." };
+  if (!BOARD_COMMENTS[post.board_type]) {
+    return { error: `${BOARD_LABELS[post.board_type]} 게시판은 댓글을 받지 않습니다.` };
+  }
+
+  await createComment({ postId, authorId: user.id, body });
+  revalidatePath(`/works/${workId}/posts/${postId}`);
+  return {};
+}
+
+/** 댓글 삭제. 소유권은 SQL 조건으로 강제한다. */
+export async function deleteCommentAction(formData: FormData) {
+  const user = await getCurrentUser();
+  const workId = String(formData.get("workId") ?? "");
+  const postId = String(formData.get("postId") ?? "");
+  const commentId = String(formData.get("commentId") ?? "");
+
+  // 글 자체가 지금 잠겨 있으면 댓글도 건드리지 않는다.
+  const post = await getVisiblePost(user.id, workId, postId);
+  if (!post) throw new Error("지금 읽을 수 없는 글입니다.");
+
+  const ok = await deleteOwnComment(commentId, postId, user.id);
+  if (!ok) throw new Error("내가 쓴 댓글만 삭제할 수 있습니다.");
+
+  revalidatePath(`/works/${workId}/posts/${postId}`);
 }

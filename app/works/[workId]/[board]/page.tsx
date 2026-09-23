@@ -16,7 +16,10 @@ import {
   BOARD_NUMERALS,
   BOARD_SLUGS,
   boardPath,
+  isUngated,
   slugToBoard,
+  progressSentence,
+  stageScopeParts,
   stageTag,
 } from "@/lib/boards";
 import type { VisiblePost } from "@/lib/types";
@@ -35,6 +38,7 @@ function Meta({ post, mine }: { post: VisiblePost; mine: boolean }) {
       <span>{post.author_name}</span>
       <span>·</span>
       <time>{post.created_at}</time>
+      {post.comment_count > 0 && <span className="cmt">댓글 {post.comment_count}</span>}
       {post.is_demo_seed && <span className="seed-tag">시연 데이터</span>}
       {mine && <span className="ep-tag">내 글</span>}
     </div>
@@ -67,8 +71,8 @@ export default async function BoardPage({
   ]);
   // 잠긴 글은 개수만 센다. 제목·본문은 조회하지 않는다.
   const lockedHere = locked[boardType] ?? 0;
-  const currentLabel =
-    stages.find((s) => s.stage_no === progress)?.label ?? "시작 전";
+  const currentStage = stages.find((s) => s.stage_no === progress) ?? null;
+  const currentLabel = currentStage?.label ?? "시작 전";
   const href = (p: VisiblePost) => `/works/${workId}/posts/${p.id}`;
 
   return (
@@ -110,8 +114,9 @@ export default async function BoardPage({
                 </div>
                 <span className="desc">{BOARD_DESCRIPTIONS[boardType]}</span>
                 <span className="caption">
-                  {user.display_name}님의 진도 {currentLabel} 기준 ·{" "}
-                  이번 구현에서는 내 진도에서 읽을 수 있는 글만 표시합니다.
+                  {isUngated(boardType)
+                    ? `${user.display_name}님의 진도와 상관없이 모든 글이 열립니다.`
+                    : `${user.display_name}님은 ${progressSentence(work.progress_unit, currentStage?.label ?? null)} · 이번 구현에서는 내 진도에서 읽을 수 있는 글만 표시합니다.`}
                 </span>
               </div>
               <Link
@@ -121,6 +126,14 @@ export default async function BoardPage({
                 {BOARD_CTA[boardType]}
               </Link>
             </div>
+
+            {isUngated(boardType) && (
+              <div className="sheet-note">
+                여기는 진도를 묻지 않는 방이에요. 쓴 글이 모두에게 그대로 보이니,
+                아직 보지 않은 사람 앞에서 해도 괜찮은 이야기만 남겨주세요.
+                내용이 걸리는 이야기는 감상·해석·후기 게시판에서 회차를 정해 적어주세요.
+              </div>
+            )}
 
             {boardType === "question" && (
               <div className="sheet-note">
@@ -140,7 +153,12 @@ export default async function BoardPage({
                 {mineOnly ? "전체 글 보기" : "내 글만 보기"}
               </Link>
               <span>
-                {posts.length}편 · {mineOnly ? "내가 쓴 글" : "지금 열람 가능한 글"}
+                {posts.length}편 ·{" "}
+                {mineOnly
+                  ? "내가 쓴 글"
+                  : isUngated(boardType)
+                    ? "진도 제한 없이 열린 글"
+                    : "지금 열람 가능한 글"}
                 {lockedHere > 0 && ` · 내 진도 이후 ${lockedHere}편 잠김`}
               </span>
             </div>
@@ -158,12 +176,24 @@ export default async function BoardPage({
               </div>
             )}
 
+            {isUngated(boardType) &&
+              posts.map((p) => (
+                <Link key={p.id} href={href(p)} className="post-row post-row-free">
+                  <span className="open">열림</span>
+                  <span className="stack" style={{ gap: 6 }}>
+                    <span className="title">{p.title}</span>
+                    <p className="excerpt">{excerpt(p.body)}</p>
+                    <Meta post={p} mine={p.author_id === user.id} />
+                  </span>
+                </Link>
+              ))}
+
             {boardType === "review" &&
               posts.map((p) => (
                 <Link key={p.id} href={href(p)} className="post-row">
                   <span className="ep">
-                    <b>{p.stage_label}</b>
-                    <span>까지의 내용</span>
+                    <b>{stageScopeParts(work.progress_unit, p.stage_label).head}</b>
+                    <span>{stageScopeParts(work.progress_unit, p.stage_label).tail}</span>
                   </span>
                   <span className="stack" style={{ gap: 6 }}>
                     <span className="title">{p.title}</span>
@@ -180,10 +210,15 @@ export default async function BoardPage({
                   <span className="stack" style={{ gap: 8 }}>
                     <span className="title">{p.title}</span>
                     <div className="post-meta">
-                      <span className="ep-tag">{stageTag("question", p.stage_label)}</span>
+                      <span className="ep-tag">
+                        {stageTag("question", p.stage_label, work.progress_unit)}
+                      </span>
                       <span>{p.author_name}</span>
                       <span>·</span>
                       <time>{p.created_at}</time>
+                      {p.comment_count > 0 && (
+                        <span className="cmt">댓글 {p.comment_count}</span>
+                      )}
                       {p.is_demo_seed && <span className="seed-tag">시연 데이터</span>}
                       {p.author_id === user.id && <span className="ep-tag">내 글</span>}
                     </div>
@@ -194,7 +229,9 @@ export default async function BoardPage({
             {boardType === "interpretation" &&
               posts.map((p) => (
                 <Link key={p.id} href={href(p)} className="post-article">
-                  <span className="cap">{stageTag("interpretation", p.stage_label)}</span>
+                  <span className="cap">
+                    {stageTag("interpretation", p.stage_label, work.progress_unit)}
+                  </span>
                   <span className="title">{p.title}</span>
                   <p className="excerpt">{excerpt(p.body)}</p>
                   <Meta post={p} mine={p.author_id === user.id} />
@@ -205,7 +242,9 @@ export default async function BoardPage({
               <div className="recap-grid">
                 {posts.map((p) => (
                   <Link key={p.id} href={href(p)} className="recap-card">
-                    <span className="range">{stageTag("recap", p.stage_label)}</span>
+                    <span className="range">
+                      {stageTag("recap", p.stage_label, work.progress_unit)}
+                    </span>
                     <span className="title">{p.title}</span>
                     <p className="excerpt">{excerpt(p.body)}</p>
                     <div

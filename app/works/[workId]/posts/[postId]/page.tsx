@@ -1,9 +1,22 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getVisiblePost, getProgress, getWork, listStages } from "@/lib/data";
+import {
+  getVisiblePost,
+  getProgress,
+  getWork,
+  listComments,
+  listStages,
+} from "@/lib/data";
 import { getCurrentUser } from "@/lib/session";
 import DeletePostButton from "./DeletePostButton";
-import { BOARD_LABELS, BOARD_NUMERALS, boardPath, stageTag } from "@/lib/boards";
+import Comments from "./Comments";
+import {
+  BOARD_COMMENTS,
+  BOARD_LABELS,
+  BOARD_NUMERALS,
+  boardPath,
+  stageTag,
+} from "@/lib/boards";
 
 export const dynamic = "force-dynamic";
 
@@ -40,13 +53,18 @@ export default async function PostDetailPage({
           글이거나 이미 삭제된 글이라 제목과 본문을 보내지 않습니다.
         </div>
         <span className="muted">
-          진도를 올리면 그 회차까지의 글이 열립니다. 잠긴 글의 제목은 미리 보여주지 않습니다.
+          {work.progress_unit === "single"
+            ? "이 작품을 다 봤다고 표시하면 글이 열립니다. 잠긴 글의 제목은 미리 보여주지 않습니다."
+            : "진도를 올리면 그 회차까지의 글이 열립니다. 잠긴 글의 제목은 미리 보여주지 않습니다."}
         </span>
       </section>
     );
   }
 
   const isMine = post.author_id === user.id;
+  const canComment = BOARD_COMMENTS[post.board_type];
+  // 댓글도 글과 같은 조건으로 서버에서 다시 판정한다(잠긴 글이면 null).
+  const comments = canComment ? await listComments(user.id, workId, postId) : null;
   const paragraphs = post.body.split(/\n{2,}|\n/).filter((p) => p.trim());
 
   return (
@@ -60,7 +78,9 @@ export default async function PostDetailPage({
 
       <article className="sheet sheet-article">
         <div className="row" style={{ gap: "8px 10px", fontSize: 12.5 }}>
-          <span className="ep-tag">{stageTag(post.board_type, post.stage_label)}</span>
+          <span className="ep-tag">
+            {stageTag(post.board_type, post.stage_label, work.progress_unit)}
+          </span>
           <span style={{ color: "#5A4E46" }}>
             {BOARD_NUMERALS[post.board_type]} {BOARD_LABELS[post.board_type]}
           </span>
@@ -114,6 +134,22 @@ export default async function PostDetailPage({
           ))}
         </div>
       </article>
+
+      {canComment && comments && (
+        <Comments
+          workId={workId}
+          postId={postId}
+          comments={comments}
+          currentUserId={user.id}
+          userLabel={user.display_name}
+        />
+      )}
+
+      {!canComment && (
+        <p className="muted" style={{ margin: 0 }}>
+          질문 게시판은 댓글 대신 같은 진도에서 각자 글로 이어집니다.
+        </p>
+      )}
 
       <Link className="btn" style={{ alignSelf: "flex-start" }} href={boardPath(workId, post.board_type)}>
         {BOARD_LABELS[post.board_type]} 게시판으로

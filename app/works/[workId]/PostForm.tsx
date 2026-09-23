@@ -8,11 +8,17 @@ import {
 } from "@/app/actions";
 import type { Stage } from "@/lib/types";
 import type { BoardType } from "@/lib/boards";
-import { BOARD_LABELS, BOARD_NUMERALS, BOARD_PLACEHOLDERS } from "@/lib/boards";
+import {
+  BOARD_LABELS,
+  BOARD_NUMERALS,
+  BOARD_PLACEHOLDERS,
+  isUngated,
+} from "@/lib/boards";
 
 /**
  * 작성과 수정이 같은 폼을 쓴다. postId가 있으면 수정 모드다.
  * 필드명(workId, boardType, postId, maxStage, title, body)과 서버 액션 연결은 그대로다.
+ * 자유 게시판은 회차를 묻는 단계 자체가 없다(서버에서도 0으로 고정한다).
  */
 export default function PostForm({
   workId,
@@ -34,7 +40,10 @@ export default function PostForm({
     {}
   );
   const placeholders = BOARD_PLACEHOLDERS[boardType];
+  const ungated = isUngated(boardType);
   const lastStage = stages[stages.length - 1];
+  // 회차 단계가 빠지면 뒤 단계 번호도 하나씩 당긴다.
+  const step = (n: number) => String(ungated ? n - 1 : n).padStart(2, "0");
 
   return (
     <form action={formAction} className="stack" style={{ gap: 30 }}>
@@ -67,32 +76,42 @@ export default function PostForm({
         </div>
       </div>
 
-      <div className="form-step">
-        <span className="step-no">02 · 기준 진도</span>
-        <label className="ask" htmlFor="maxStage">
-          {question}
-        </label>
-        <select
-          id="maxStage"
-          name="maxStage"
-          className="field"
-          defaultValue={post?.max_stage ?? lastStage.stage_no}
-        >
-          {stages.map((s) => (
-            <option key={s.stage_no} value={s.stage_no}>
-              {s.label}
-            </option>
-          ))}
-        </select>
-        <span className="hint">
-          선택한 {unit} 이후의 내용과 암시는 포함하지 마세요. 내 진도({lastStage.label})보다
-          뒤는 고를 수 없어요.
-        </span>
-      </div>
+      {ungated ? (
+        <div className="form-step">
+          <span className="step-no">범위 없음</span>
+          <span className="hint">
+            자유 게시판 글은 회차를 지정하지 않습니다. 진도와 상관없이 모든 사람에게
+            제목과 본문이 그대로 보이니, 뒷내용이 드러나는 이야기는 다른 게시판에 적어주세요.
+          </span>
+        </div>
+      ) : (
+        <div className="form-step">
+          <span className="step-no">02 · 기준 진도</span>
+          <label className="ask" htmlFor="maxStage">
+            {question}
+          </label>
+          <select
+            id="maxStage"
+            name="maxStage"
+            className="field"
+            defaultValue={post?.max_stage ?? lastStage?.stage_no}
+          >
+            {stages.map((s) => (
+              <option key={s.stage_no} value={s.stage_no}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+          <span className="hint">
+            선택한 {unit} 이후의 내용과 암시는 포함하지 마세요. 내 진도({lastStage?.label})보다
+            뒤는 고를 수 없어요.
+          </span>
+        </div>
+      )}
 
       <div className="form-step">
         <label className="step-no" htmlFor="title">
-          03 · 제목
+          {step(3)} · 제목
         </label>
         <input
           id="title"
@@ -106,7 +125,7 @@ export default function PostForm({
 
       <div className="form-step">
         <label className="step-no" htmlFor="body">
-          04 · 본문
+          {step(4)} · 본문
         </label>
         <textarea
           id="body"
@@ -120,7 +139,11 @@ export default function PostForm({
       {state.error && <p className="form-error">{state.error}</p>}
 
       <div className="form-foot">
-        <span>{BOARD_LABELS[boardType]} 게시판에 선택한 범위까지의 내용으로 등록됩니다.</span>
+        <span>
+          {ungated
+            ? `${BOARD_LABELS[boardType]} 게시판에 진도 제한 없이 등록됩니다.`
+            : `${BOARD_LABELS[boardType]} 게시판에 선택한 범위까지의 내용으로 등록됩니다.`}
+        </span>
         <button className="btn btn-primary" type="submit" disabled={pending}>
           {pending ? "저장 중…" : post ? "수정 저장" : "등록"}
         </button>

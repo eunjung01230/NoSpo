@@ -1,7 +1,13 @@
-import { countWorksByCategory, listWorkCards } from "@/lib/data";
+import {
+  countMyPosts,
+  countWorksByCategory,
+  listWorkCards,
+  recommendWorks,
+} from "@/lib/data";
 import { isDbConfigured } from "@/lib/db";
 import { getCurrentUser } from "@/lib/session";
 import CategorySidebar from "./CategorySidebar";
+import Recommendations from "./Recommendations";
 import WorkGrid from "./WorkGrid";
 
 export const dynamic = "force-dynamic";
@@ -24,9 +30,11 @@ export default async function WorkBrowsePage() {
   }
 
   const user = await getCurrentUser();
-  const [works, categoryCounts] = await Promise.all([
+  const [works, categoryCounts, recommended, myPosts] = await Promise.all([
     listWorkCards(user.id),
     countWorksByCategory(),
+    recommendWorks(user.id),
+    countMyPosts(user.id),
   ]);
 
   return (
@@ -64,6 +72,12 @@ export default async function WorkBrowsePage() {
           </p>
         </div>
       </section>
+
+      <Recommendations
+        works={recommended}
+        userLabel={user.display_name}
+        hasPosts={myPosts > 0}
+      />
 
       <section className="band-low">
         <div className="container browse" style={{ paddingBlock: "40px 80px" }}>

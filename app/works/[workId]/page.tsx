@@ -12,6 +12,7 @@ import { getCurrentUser } from "@/lib/session";
 import { boardPath, isBoardType } from "@/lib/boards";
 import BoardNav from "./BoardNav";
 import ProgressPanel from "./ProgressPanel";
+import TimePanel from "./TimePanel";
 import WorkIntro from "./WorkIntro";
 
 export const dynamic = "force-dynamic";
@@ -67,12 +68,15 @@ export default async function WorkRoomPage({
         )}
         <div style={{ display: "flex", flexWrap: "wrap", gap: "28px 48px", alignItems: "flex-start" }}>
           <WorkIntro work={work} totalStages={stages.length} />
-          <ProgressPanel
-            work={work}
-            stages={stages}
-            progress={progress}
-            userLabel={user.display_name}
-          />
+          <div className="stack" style={{ flex: "0 1 380px", gap: 14 }}>
+            <ProgressPanel
+              work={work}
+              stages={stages}
+              progress={progress}
+              userLabel={user.display_name}
+            />
+            <TimePanel work={work} totalStages={stages.length} progress={progress} />
+          </div>
         </div>
       </section>
 

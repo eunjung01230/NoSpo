@@ -1,4 +1,5 @@
 import { unitNoun } from "@/lib/boards";
+import { formatMinutes, totalMinutes } from "@/lib/runtime";
 import type { Work } from "@/lib/types";
 import Poster from "@/app/Poster";
 
@@ -15,6 +16,8 @@ export default function WorkIntro({
   const unit = unitNoun(work.progress_unit);
   const length =
     work.progress_unit === "single" ? "단일 작품" : `전 ${totalStages}${unit}`;
+  // 작품을 고를 때 "시간이 얼마나 드는지"가 바로 보이도록 머리글에 함께 적는다.
+  const runtime = totalMinutes(work.minutes_per_stage, totalStages);
 
   return (
     <div
@@ -36,6 +39,7 @@ export default function WorkIntro({
       <div className="stack" style={{ flex: "1 1 260px", gap: 9 }}>
         <span style={{ fontSize: 12.5, color: "var(--ns-rose)" }}>
           {work.board} · {length}
+          {runtime > 0 ? ` · 총 ${formatMinutes(runtime)}` : ""}
           {work.year ? ` · ${work.year}` : ""}
         </span>
         {compact ? (

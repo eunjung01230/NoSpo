@@ -12,6 +12,9 @@ Next.js(App Router, TypeScript) + Neon Postgres(`@neondatabase/serverless`).
 - 공개 조건: `글의 max_stage <= 현재 사용자의 진도`. 판정은 항상 서버에서 한다.
 - 게시판(감상/질문/해석/후기)은 `posts.board_type` 한 컬럼으로 구분한다. 게시판별 테이블을
   만들지 않으며, 게시판·내 글 필터는 공개 조건에 AND로만 덧붙인다.
+- 화면에서는 게시판이 각각 독립된 공간으로 보이게 한다: 고유 주소
+  (/works/[workId]/impressions|questions|analysis|reviews), 고유 제목·설명, 목록,
+  게시판별 글쓰기 버튼. 슬러그와 타입 매핑은 lib/boards.ts에만 둔다.
 - 수정·삭제는 `author_id = 현재 사용자`를 SQL 조건으로 강제하고, 0행이면 권한 없음으로 본다.
 - 진도는 올리기와 낮추기 모두 가능하다. 낮추면 그 이후 글이 즉시 다시 숨겨지고 글은 남는다.
 - 진도 단위는 works.progress_unit으로 구분한다: episode(화), film(편), volume(권),
